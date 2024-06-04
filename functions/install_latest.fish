@@ -31,14 +31,20 @@ function install_latest_in
       set -l current_major (string split "." $current_version)[1]
       set -l latest_minor (string split "." $latest_version)[2]
       set -l current_minor (string split "." $current_version)[2]
-      set -l latest_patch (string split "." $latest_version)[3]
-      set -l current_patch (string split "." $current_version)[3]
+      set -l latest_patch_with_pre (string split "." $latest_version)[3]
+      set -l current_patch_with_pre (string split "." $current_version)[3]
+      set -l latest_patch (string split "-" $latest_patch_with_pre)[1]
+      set -l current_patch (string split "-" $current_patch_with_pre)[1]
+      set -l latest_prerelease (string split "-" $latest_patch_with_pre)[2]
+      set -l current_prerelease (string split "-" $current_patch_with_pre)[2]
       if test $latest_major -gt $current_major
-        printf "   - $package: \033[1;31m$latest_major.$latest_minor.$latest_patch\033[0m\n"
+        printf "   - $package: $current_version -> \033[1;31m$latest_major.$latest_minor.$latest_patch\033[0m\n"
       else if test $latest_minor -gt $current_minor
-        printf "   - $package: \033[33m$latest_major.\033[1;33m$latest_minor.$latest_patch\033[0m\n"
+        printf "   - $package: $current_version -> \033[33m$latest_major.\033[1;33m$latest_minor.$latest_patch\033[0m\n"
       else if test $latest_patch -gt $current_patch
-        printf "   - $package: \033[32m$latest_major.$latest_minor.\033[1;32m$latest_patch\033[0m\n"
+        printf "   - $package: $current_version -> \033[32m$latest_major.$latest_minor.\033[1;32m$latest_patch\033[0m\n"
+      else if test $latest_prerelease != $current_prerelease
+        printf "   - $package: $current_version -> \033[35m$latest_major.$latest_minor.$latest_patch-$latest_prerelease\033[0m\n"
       else
         printf "   - $package: \033[34m$latest_version\033[0m\n"
       end
