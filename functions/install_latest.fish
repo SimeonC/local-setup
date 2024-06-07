@@ -8,7 +8,8 @@ function install_latest_in
   end
   cp $package_json $package_json_tmp
   printf "\033[1;34mUpgrading $package_json...\033[0m\n"
-  for key in (jq -r 'keys[]' $package_json_tmp | grep -i 'dependencies')
+  set -l dependency_keys (jq -r 'keys[]' $package_json_tmp | grep -i 'dependencies')
+  for key in $dependency_keys
     printf "\033[34m  [$key]\033[0m\n"
     set -l packages
     for glob in $globs
@@ -21,10 +22,11 @@ function install_latest_in
       continue
     end
     for package in (string split " " $packages)
+      printf "   - $package: "
       set -l latest_version (npm show $package version)
       set -l current_version (jq -r ".\"$key\"[\"$package\"]" $package_json_tmp)
       if test $latest_version = $current_version
-        printf "   - $package: \033[36m[latest]\033[0m\n"
+        printf "\033[36m[latest]\033[0m\n"
         continue
       end
       set -l latest_major (string split "." $latest_version)[1]
@@ -37,16 +39,17 @@ function install_latest_in
       set -l current_patch (string split "-" $current_patch_with_pre)[1]
       set -l latest_prerelease (string split "-" $latest_patch_with_pre)[2]
       set -l current_prerelease (string split "-" $current_patch_with_pre)[2]
+      printf "$current_version -> "
       if test $latest_major -gt $current_major
-        printf "   - $package: $current_version -> \033[1;31m$latest_major.$latest_minor.$latest_patch\033[0m\n"
+        printf "\033[1;31m$latest_major.$latest_minor.$latest_patch\033[0m\n"
       else if test $latest_minor -gt $current_minor
-        printf "   - $package: $current_version -> \033[33m$latest_major.\033[1;33m$latest_minor.$latest_patch\033[0m\n"
+        printf "\033[33m$latest_major.\033[1;33m$latest_minor.$latest_patch\033[0m\n"
       else if test $latest_patch -gt $current_patch
-        printf "   - $package: $current_version -> \033[32m$latest_major.$latest_minor.\033[1;32m$latest_patch\033[0m\n"
+        printf "\033[32m$latest_major.$latest_minor.\033[1;32m$latest_patch\033[0m\n"
       else if test $latest_prerelease != $current_prerelease
-        printf "   - $package: $current_version -> \033[35m$latest_major.$latest_minor.$latest_patch-$latest_prerelease\033[0m\n"
+        printf "\033[35m$latest_major.$latest_minor.$latest_patch-$latest_prerelease\033[0m\n"
       else
-        printf "   - $package: \033[34m$latest_version\033[0m\n"
+        printf "\033[34m$latest_version\033[0m\n"
       end
       jq ".\"$key\"[\"$package\"] = \"$latest_version\"" $package_json_tmp > $package_json_tmp.tmp
       mv $package_json_tmp.tmp $package_json_tmp
@@ -58,6 +61,9 @@ end
 
 function install_latest
   install_latest_in . $argv
+  if test (jq -e '.workspaces' package.json) = null
+    return
+  end
   set -l workspaces (jq -r '.workspaces[] // empty' package.json | string trim)
   for dir_glob in $workspaces
     for dir in (string split " " (eval echo $dir_glob))
