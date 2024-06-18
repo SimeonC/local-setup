@@ -23,8 +23,12 @@ function install_latest_in
     end
     for package in (string split " " $packages)
       printf "   - $package: "
+      set -l current_version (jq -r ".\"$key\"[\"$package\"]" $package_json_tmp | string replace -r '\^' '')
+      if test $current_version = "*"
+        printf "\033[36m*\033[0m\n"
+        continue
+      end
       set -l latest_version (npm show $package version)
-      set -l current_version (jq -r ".\"$key\"[\"$package\"]" $package_json_tmp)
       if test $latest_version = $current_version
         printf "\033[36m[latest]\033[0m\n"
         continue
@@ -37,7 +41,6 @@ function install_latest_in
       set -l current_patch_with_pre (string split "." $current_version)[3]
       set -l latest_patch (string split "-" $latest_patch_with_pre)[1]
       set -l current_patch (string split "-" $current_patch_with_pre)[1]
-      set -l latest_prerelease (string split "-" $latest_patch_with_pre)[2]
       set -l current_prerelease (string split "-" $current_patch_with_pre)[2]
       printf "$current_version -> "
       if test $latest_major -gt $current_major
@@ -46,8 +49,8 @@ function install_latest_in
         printf "\033[33m$latest_major.\033[1;33m$latest_minor.$latest_patch\033[0m\n"
       else if test $latest_patch -gt $current_patch
         printf "\033[32m$latest_major.$latest_minor.\033[1;32m$latest_patch\033[0m\n"
-      else if test $latest_prerelease != $current_prerelease
-        printf "\033[35m$latest_major.$latest_minor.$latest_patch-$latest_prerelease\033[0m\n"
+      else if test -n $current_prerelease
+        printf "\033[35m$latest_major.$latest_minor.$latest_patch\033[0m\n"
       else
         printf "\033[34m$latest_version\033[0m\n"
       end
@@ -56,12 +59,17 @@ function install_latest_in
     end
   end
   mv $package_json_tmp $package_json
-  npx prettier --log-level=error --write $package_json  
+  npx prettier --log-level=error --write $package_json
 end
 
 function install_latest
+  if test ! -f package.json
+    printf "\033[1;31mNo package.json found.\033[0m\n"
+    return
+  end
   install_latest_in . $argv
-  if test (jq -e '.workspaces' package.json) = null
+  if test (jq '.workspaces? | length' package.json) -eq 0
+    printf "\033[1;34mNo workspaces found.\033[0m\n"
     return
   end
   set -l workspaces (jq -r '.workspaces[] // empty' package.json | string trim)
