@@ -1,5 +1,5 @@
 .DS_Store
 /fish_variables
-/functions/get_ci_toolbox_dev.fish
 /functions/npm_tablecheck.fish
 /functions/set_codeartifact_env.fish
+/functions/*.cache
