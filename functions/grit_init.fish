@@ -2,7 +2,7 @@ function grit_init
   mkdir .grit
   cd .grit
   mkdir patterns
-  ln -s ~/.grit/patterns/ patterns/local
+  ln -s ~/.config/fish/grit_patterns/ patterns/local
   cd ..
   npx grit init
   echo "version: 0.0.1

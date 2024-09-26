@@ -27,6 +27,8 @@ end
 
 begin
   set -eg ASDF_DIR
+  set -gx ASDF_CONFIG_FILE $HOME/.config/fish/configs/.asdfrc
+  set -gx ASDF_NPM_DEFAULT_PACKAGES_FILE $HOME/.config/fish/configs/.default-npm-packages
   set -gx LC_ALL en_US.UTF-8
   set -gx LANG en_US.UTF-8
   set -gx PATH $PATH $HOME/bin
@@ -40,13 +42,10 @@ begin
   set -g theme_title_display_path no
   set -g theme_title_display_user no
   set -g theme_title_use_abbreviated_path no
-  set -g RECORD_REPLAY_API_KEY ruk_TbBGhacqeXZFrXMkEtBqslp2fnv57QmQo64lnEccm09
   set -gx EDITOR "code --wait"
   set -gx VISUAL "code --wait"
   set -gx VIEWER "code"
   set fish_greeting
-  echo "GREETINGS"
-  echo $PATH
   eval "$(pyenv init --path)"
 
   source /opt/homebrew/opt/asdf/libexec/asdf.fish

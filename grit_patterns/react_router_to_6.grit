@@ -1,0 +1,38 @@
+engine marzano(0.1)
+language js
+
+pattern RR_to_v6() {
+    or {
+        `import { $props } from 'react-router-dom'` where {
+            $props <: contains `useHistory` => `useNavigate`,
+            $props <: contains `useRouteMatch` => `useMatch`
+        },
+        `history.push($path)` => `navigate($path)`,
+        `history.go` => `(steps: number) => navigate(steps)`,
+        `history.go($a)` => `navigate($a)`,
+        `history.goBack` => `() => navigate(-1)`,
+        `history.goBack()` => `navigate(-1)`,
+        `history.goForward` => `() => navigate(1)`,
+        `history.goForward()` => `navigate(1)`,
+        `history.replace($path)` => `navigate($path, { replace: true })`,
+        `history.listen($cb)` => `navigate.listen($cb)`,
+        `history.location` => `window.location`,
+        `const history = useHistory()` => `const navigate = useNavigate()`,
+        `history` => `navigate`,
+        function_declaration(body = contains or {
+            `const { path } = useRouteMatch()` => .,
+            `const { $props } = useRouteMatch()` where {
+                $props <: contains `path` => .
+            }
+        }) as $func where {
+            $func <: contains bubble jsx_assigned_attribute(name="path", value=$value) as $attr where {
+                or {
+                    $attr <: within `<Route $.../>`,
+                    $attr <: within `<Route $...>$...</Route>`,
+                },
+                $value <: contains template_content(content = $content),
+                $content <: [template_substitution(expressions = `path`) => ., r"^/(.*)"($r) => `$r`, ...]
+            }
+        }
+    }
+}

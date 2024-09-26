@@ -1,0 +1,54 @@
+engine marzano(0.1)
+language js
+
+pattern prototype_to_class() {
+    program(statements = $statements) where {
+        $statements <: contains bubble($statements) `function $class($args) {$body}` as $root where {
+            ! $root <: within `$_ = $_`,
+            $methods = [],
+            $statements <: contains bubble($methods) `$class.prototype.$method = $func` where {
+                $func <: `function ($args) { $method_body }`,
+                $methods += `$method($args) { $method_body }`
+            } => .,
+            $methods = join($methods, `
+
+    `)
+        } => `class $class {
+            constructor($args) {$body}
+
+            $methods
+        }`
+    }
+}
+
+pattern add_class_method_jsdoc() {
+    method_definition() as $method where {
+        $method <: not after comment(),
+        $comments = [],
+        $method <: any {
+            contains return_statement(),
+            contains required_parameter()
+        },
+        $method <: maybe contains bubble($comments) required_parameter(pattern=$arg, value=$value) where {
+            $type = `*`,
+            if ($value <: number()) { $type = `number` },
+            if ($value <: string()) { $type = `string` },
+            if ($value <: or { `true`, `false` }) { $type = `boolean` },
+            $comments += `@param {$type} $arg`
+        },
+        $method <: maybe contains return_statement() as $return where {
+            if ($return <: contains `new $class($...)`) {
+                $comments += `@returns {$class}`
+            } else if ($return <: `return this`) {
+                $comments += `@chainable`
+            } else {
+                $comments += `@returns`
+            }
+        },
+        $commments = join($comments, "
+* ")
+    } => `/**
+* $comments
+*/
+$method`
+}

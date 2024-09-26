@@ -1,0 +1,50 @@
+engine marzano(0.1)
+language js
+
+pattern update_react_i18next_TFunction() {
+    or {
+        and {
+            program(statements = contains `import {$imports} from 'i18next'` where {
+                !$imports <: contains `TFunction`,
+                $imports => `$imports, TFunction`
+            }),
+            program(statements = contains or {
+                `import { TFunction } from 'react-i18next';` => .,
+                `import { $imports } from 'react-i18next';` where {
+                    $imports <: contains `TFunction` => .
+                }
+            })
+        },
+        program(statements = contains or {
+            `import { TFunction } from 'react-i18next';` => `import { TFunction } from 'i18next';`,
+            `import { $imports } from 'react-i18next';` as $import where {
+                $imports <: contains `TFunction` => .
+            } => `$import; import { TFunction } from 'i18next';`
+        })
+    }
+}
+
+pattern update_react_i18next_TFuncKey() {
+and {
+    or {
+        and {
+            program(statements = contains `import {$imports} from 'i18next'` where {
+                !$imports <: contains `ParseKeys`,
+                $imports => `$imports, ParseKeys`
+            }),
+            program(statements = contains or {
+                `import { TFuncKey } from 'react-i18next';` => .,
+                `import { $imports } from 'react-i18next';` where {
+                    $imports <: contains `TFuncKey` => .
+                }
+            })
+        },
+        program(statements = contains or {
+            `import { TFuncKey } from 'react-i18next';` => `import { ParseKeys } from 'i18next';`,
+            `import { $imports } from 'react-i18next';` as $import where {
+                $imports <: contains `TFuncKey` => .
+            } => `$import; import { ParseKeys } from 'i18next';`
+        })
+    },
+    program(statements = contains `TFuncKey<$t>` => `ParseKeys<$t>`)
+}}

@@ -1,0 +1,21 @@
+engine marzano(0.1)
+language js
+
+private pattern decoratorFunctions() {
+and {
+    program(statements = contains `const $n: NonNullable<Preview['decorators']>[number] = $f;` => `const $n: DecoratorFunction = $f;`),
+    any {
+        program(statements = contains `import { Preview } from '@storybook/react';` => .),
+        program(statements = contains `import { $args } from '@storybook/react';` where {
+            $args <: contains `Preview` => .,
+        }),
+        program(statements = $a) => `import { DecoratorFunction } from '@storybook/types';$a`
+    }
+}
+}
+
+pattern storybook() {
+    any {
+        decoratorFunctions()
+    }
+}
