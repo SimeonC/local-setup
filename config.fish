@@ -60,6 +60,7 @@ begin
   alias bld build
   alias i install
   alias grt grit
+  alias refactor "grit apply --force refactor"
   alias grt_clean grit_remove_debug
   alias audit "npm run audit"
   alias ql quality
@@ -68,7 +69,8 @@ begin
   alias format "quality --fix"
   alias m multi_run
   alias clog "npm run co:login"
-  alias prw "prettier -w ."
+  alias prw "prettier --log-level error -w ."
+  alias "grit_refactor" "grit apply --force refactor; and prettier -w ."
 
 end &> /dev/null
 

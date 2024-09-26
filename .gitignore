@@ -3,3 +3,4 @@
 /functions/npm_tablecheck.fish
 /functions/set_codeartifact_env.fish
 /functions/*.cache
+/conf.d
