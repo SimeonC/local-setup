@@ -6,4 +6,4 @@ lock-diff
 npm-run-all
 replayio
 nx
-@getgrit/launcher
+@getgrit/cli

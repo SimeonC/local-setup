@@ -69,7 +69,7 @@ begin
   alias m multi_run
   alias clog "npm run co:login"
   alias prw "prettier --log-level error -w ."
-  alias "grit_refactor" "grit apply --force refactor; and prettier -w ."
+  alias "grit_refactor" "grit apply --force refactor; and prettier --log-level=error -w ."
 
 end &> /dev/null
 
