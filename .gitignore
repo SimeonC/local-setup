@@ -1,0 +1,12 @@
+.DS_Store
+/fish_variables
+/functions/secure
+/functions/*.cache
+/functions/_tide*
+/functions/tide
+/conf.d
+fisher.fish
+tide.fish
+fish_prompt.fish
+fishd.tmp.*
+/grit_patterns/refactor.md

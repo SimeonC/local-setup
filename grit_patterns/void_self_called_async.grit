@@ -1,0 +1,6 @@
+engine marzano(0.1)
+language js
+
+pattern void_self_called_async() {
+    `(async () => { $func })()` as $call => `void $call`
+}

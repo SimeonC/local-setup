@@ -1,0 +1,13 @@
+engine marzano(0.1)
+language js
+
+pattern TS_prefix_absolute_path() { 
+    or {
+        export_statement(source=`'$importFolder'`),
+        import_statement(source=`'$importFolder'`),
+        `import('$importFolder')`
+    } where {
+        $importFolder <: r"^([a-zA-Z0-9-]+)(/.*|$)"($folder,$rest),
+        $folder <: r"^(?:App|Common|Configs|data|definitions|enums|i18n|Layouts|Pages|Router|types|utils|storybook-assets)$" => js"~/$folder"
+    }
+}

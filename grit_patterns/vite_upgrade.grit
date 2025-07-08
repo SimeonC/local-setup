@@ -1,0 +1,218 @@
+engine marzano(0.1)
+language js
+
+pattern CONFIG_to_vite_env() {
+and {
+    $s = js"_",
+    `$o.$p` => `$o$s$p` where {
+        $o <: `CONFIG` => `import.meta.env.VITE`,
+        or {
+            $p <: `appVersion` => `APP_VERSION`,
+            $p <: `deployTarget` => `DEPLOY_TARGET`,
+            $p <: `useDevTools` => `DEV`,
+            $p <: `sentryDsn` => `SENTRY_DSN`,
+            $p <: `ingressDomain` => `INGRESS_DOMAIN`,
+            $p <: `apiUri` => `VITE_API_URL`,
+            $p <: `publicUri` => `PUBLIC_URL`,
+            $p <: `cdnURL` => `CDN_URL`,
+            $p <: `dinerAppOrigin` => `DINER_APP_URL`,
+            $p <: `legacyOrigin` => `LEGACY_URL`,
+            $p <: `legacyEmbedOrigin` => `LEGACY_EMBED_URL`,
+            $p <: `legacyEmbedRootUri` => `LEGACY_EMBED_ROOT_URL`,
+            $p <: `insightUrl` => `INSIGHT_URL`,
+            $p => $p
+        }
+    }
+}
+}
+
+pattern cleanup_vite_env() {
+    member_expression(object = $o, chain = $c, property = $p) where {
+        or {
+            $p <: `VITE_DEV` => `DEV`,
+            $p <: `VITE_PUBLIC_URL` => `BASE_URL`,
+            $p => $p
+        }
+    }
+}
+
+pattern clean_merchant_portal() {
+    import_statement(import=$imports, source=$source) as $statement where {
+        or {
+            and {
+                $statement <: contains r"\@tablecheck-internal\/merchant-portal\/dev",
+                $statement => .
+            },
+            $source <: contains r"\@tablecheck-internal\/merchant-portal\/app-notice",
+            $source <: contains r"\@tablecheck-internal\/merchant-portal\/app-notice\/.*" => `@tablecheck-internal/merchant-portal/app-notice`,
+            $source <: contains r"\@tablecheck-internal\/merchant-portal\/.*" => `@tablecheck-internal/merchant-portal`
+        }
+    }
+}
+
+pattern upgrade_merchant_portal() {
+    program(statements = $statements) where {
+        $statements <: contains bubble($statements) {
+            `import { $imports } from '@tablecheck-internal/merchant-portal'` where {
+                $types_import = `Types`,
+                $new_imports = [],
+                $imports <: contains bubble($new_imports, $types_import) import_specifier(name=$impl) where {
+                    or {
+                        $impl <: r"^Api.*",
+                        and {
+                            $impl <: `Types as $alias` as $alias_import,
+                            $types_import = $alias,
+                            $new_imports += $alias_import
+                        },
+                        $new_imports += $impl
+                    }
+                },
+                $imports <: contains bubble($statements, $types_import) {
+                    import_specifier(name=$import) where {
+                        $import <: r"^Api.*",
+                        $statements <: contains bubble($import, $types_import) {
+                            `$import`as $i where {
+                                $i <: not within nested_type_identifier()
+                            } => `$types_import.$import`
+                        }
+                    }
+                },
+                $new_imports = join($new_imports, ", ")
+            } => `import { $new_imports } from '@tablecheck-internal/merchant-portal'`
+        }
+    }
+}
+
+
+pattern update_i18next_translations() {
+    or {
+        jsx_assigned_attribute(name=`placeholder`,value=jsx_expression(expression=`t($args)` => `t($args) ?? undefined`)),
+        `translateKey(t, [$opts])` where {
+            or {
+                and {
+                    $opts <: [string(), $options],
+                    or {
+                        and {
+                            $options <: contains `transformModel: ($m) => $m.$chain()` => .,
+                            $options <: contains `model: [$key]` => `model: t($key).$chain()`
+                        },
+                        and {
+                            $options <: contains `transformModel: $transform` => .,
+                            $options <: contains `model: [$key]` => `model: ($transform)(t($key))`
+                        },
+                        $options <: contains `model: [$key]`
+                    }
+                },
+                $opts <: [string(), $...]
+            }
+        } => `t($opts)`
+    }
+}
+pattern remove_unused_translateKey() {
+    and {
+        program(statements=not contains call_expression(function=`translateKey`)),
+        program(statements=contains any {
+            `import { translateKey } from '~/utils/translateKey'` => .,
+            `import { $imports } from '~/utils/translateKey'` where {
+                $imports <: contains `translateKey` => .
+            }
+        })
+    }
+}
+
+pattern bad_imports() {
+    or {
+        import_statement(source=r"'(axios|react-hook-form)/.*'"($root) => `'$root'`),
+        import_statement(source=r"'(react-select)/(.*)'"($root, $subpath) where {
+            $subpath <: not r"animated",
+            $subpath <: not r"async",
+            $subpath <: not r"async-creatable",
+            $subpath <: not r"base",
+            $subpath <: not r"creatable"
+        } => `'$root'`)
+    }
+}
+
+private pattern global_types_utils_imports() {
+    or { `PromiseOrValue`, `LazyValue`, `StringToUnion`, `RemapKeys`, `RemapByType`, `RequiredKeys`, `OptionalKeys`, `IsNumberKey`, `ObjectKeyPaths`, `NoInfer` }
+}
+pattern global_types_utils() {
+    program(statements = $statements) where {
+        $imports = [],
+        $statements <: contains bubble($imports) and {
+            global_types_utils_imports()  as $import where {
+                $imports <: not contains `$import`,
+                $import <: not within export_statement(declaration = type_alias_declaration(name = `$import`)),
+                $import <: not within export_statement(declaration = type_alias_declaration(name = global_types_utils_imports())),
+            },
+            $imports += $import
+        },
+        $imports = join(list=$imports, separator=", "),
+        or {
+            $statements <: contains `import { $old } from '@local/type-utils';` => `import { $imports } from '@local/type-utils';`,
+            $statements => `import { $imports } from '@local/type-utils';
+$statements`
+        }
+    }
+}
+
+
+private pattern cypress_mount_import() {
+    and {
+        program(statements=contains `import { mount } from '#cypress/support/component'` => .),
+        program(statements=contains bubble `mount($args)` => `cy.mount($args)`)
+    }
+}
+
+private pattern cypress_env_upgrade() {
+    or { `Cypress.config().baseUrl`, `Cypress.config('baseUrl')` } => `Cypress.env('baseUrl')`
+}
+
+private pattern cypress_import_switch() {
+    import_statement(source=`'$source'`) where {
+        $source <: r"(.*)\.cypress$"($path) => js"$path.cy"
+    }
+}
+
+private pattern clean_cypress_src() {
+    program(statements = $statements) where {
+        $statements <: contains bubble `PresetUser.$user` => `'$user'`,
+        $statements <: maybe contains `import { PresetUser } from '#cypress/support/logins'` => .
+    }
+}
+
+private pattern cypress_location() {
+    any {
+        `cy.location('pathname')` as $loc where {
+            $loc <: not within `Cypress.Commands.add('pathname', $_)`
+        } => `cy.pathname()`,
+        `cy.url().should('eq', $check)` where {
+            $check <: contains `${Cypress.env('baseUrl')}` => .
+        } => `cy.pathname().should('eq', $check)`
+    }
+}
+
+pattern vite_upgrade_cypress() {
+    any {
+        cypress_env_upgrade(),
+        cypress_import_switch(),
+        cypress_mount_import(),
+        `mountComponent` => `mountComponentTest`,
+        clean_cypress_src(),
+        cypress_location()
+    }
+}
+
+pattern vite_upgrade_cypress_inline_imports() {
+    `import { IMAGE_1_URL } from '#cypress/support/forms/images';` => `const IMAGE_1_URL = 'https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png';`
+}
+
+pattern vite_upgrade_models() {
+    or {
+        `import { $imports } from '~/enums/endpoints';` => `import { $imports } from '~/data/endpoints';`,
+        `import { $imports } from '$path'` where or {
+            $path <: r"~/enums/.*",
+            $path <: r"~/types/.*",
+        } => `import { $imports } from '@local/models';`
+    }
+}

@@ -1,0 +1,19 @@
+engine marzano(0.1)
+language js
+
+pattern upgrade_prettier_v3() {
+    any {
+        `prettier.resolveConfig.sync` as $m => `await prettier.resolveConfig`,
+        `await prettier.format` as $m,
+        `prettier.format` as $m => `await prettier.format`
+    } where {
+        or {
+            $m <: within arrow_function(async = js"async"),
+            $m <: within arrow_function(body = $body, parameters = $parameters) => `/* TODO await */ async ($parameters) => $body`,
+            $m <: within function_declaration(async = js"async"),
+            $m <: within function_declaration(body = $body, name = $name, parameters = $parameters) => `// TODO await
+async function $name($parameters) $body`,
+            $m <: within program()
+        }
+    }
+}

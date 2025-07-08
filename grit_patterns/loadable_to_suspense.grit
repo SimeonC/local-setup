@@ -1,0 +1,53 @@
+engine marzano(0.1)
+language js
+
+pattern loadable_to_suspense() {
+or {
+    `import loadable from '@loadable/component';` as $import where {
+        if ($import <: within program(statements = contains `import * as React from 'react'`)) {
+            $import => .
+        } else {
+            $import => `import * as React from 'react';`
+        }
+    },
+    `LoadableComponent<$generic>` where {
+        $generic <: js"unknown" => `React.ComponentType`
+    } => `ReturnType<typeof React.lazy<$generic>>`,
+    or {
+        `const $name = loadable($fileImport, $options) as $type;`,
+        `$name: loadable($fileImport, $options) as $type`,
+        `const $name = loadable($fileImport, $options);`,
+        `$name: loadable($fileImport, $options)`,
+        and {
+            or {
+                `const $name = loadable($fileImport);`,
+                `$name: loadable($fileImport)`,
+            },
+            $options = `{}`
+        }
+    } as $statement where {
+        or {
+            and {
+                or {
+                    $options <: contains `resolveComponent: ($_) => $_.$import`,
+                    $options <: contains `resolveComponent: ($_) => $_.$import as $_`
+                }, 
+                $importRemap = js".then(e => ({ default: e.$import }))"
+            },
+            $importRemap = js""
+        },
+        or {
+            $options <: contains `fallback: $fallback`,
+            $fallback = js"null"
+        },
+        or {
+            $statement <: within pair() => `// TODO wrap with <React.Suspense fallback={$fallback}>
+ $name: React.lazy($fileImport$importRemap)`,
+            $statement <: within export_statement() => `// TODO wrap with <React.Suspense fallback={$fallback}>
+export const $name = React.lazy($fileImport$importRemap)`,
+            $statement => `// TODO wrap with <React.Suspense fallback={$fallback}>
+const $name = React.lazy($fileImport$importRemap)`
+        }
+    },
+}
+}

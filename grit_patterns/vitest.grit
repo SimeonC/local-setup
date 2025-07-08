@@ -1,0 +1,46 @@
+engine marzano(0.1)
+language js
+
+private pattern __vi_replacements($statements, $imports) {
+    and {
+        any {
+            $statements where {
+                $statements <: contains `jest.fn` => `vi.fn`
+            },
+            $statements where {
+                $statements <: contains `jest.mock` => `vi.mock`
+            }
+        },
+        $imports += js"vi"
+    }
+}
+
+private pattern __vitest_function($statements, $function, $imports) {
+    $statements where {
+        $statements <: contains `$f($_)` where $f <: `$function`,
+        $imports += $function
+    }
+}
+
+private pattern __vitest_matches($statements, $imports) {
+    any {
+        __vi_replacements($statements, $imports),
+        __vitest_function($statements, function = js"beforeAll", $imports),
+        __vitest_function($statements, function = js"afterAll", $imports),
+        __vitest_function($statements, function = js"beforeEach", $imports),
+        __vitest_function($statements, function = js"afterEach", $imports),
+        __vitest_function($statements, function = js"describe", $imports),
+        __vitest_function($statements, function = js"test", $imports),
+        __vitest_function($statements, function = js"expect", $imports)
+    }
+}
+
+pattern jest_to_vitest() {
+    program(statements = $statements) where {
+        $imports = [],
+        $statements <: __vitest_matches($statements, $imports),
+        $imports_list = join(list=$imports, separator=", "),
+        $statements => `import { $imports_list } from 'vitest';
+$statements`
+    }
+}
