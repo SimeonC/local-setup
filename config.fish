@@ -49,7 +49,7 @@ begin
 
 end &> /dev/null
 
-aws_login
+secure_aws_login
 
 # pnpm
 set -gx PNPM_HOME "$HOME/Library/pnpm"

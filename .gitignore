@@ -1,6 +1,6 @@
 .DS_Store
 /fish_variables
-/functions/secure
+/functions/secure_*
 /functions/*.cache
 /functions/_tide*
 /functions/tide
