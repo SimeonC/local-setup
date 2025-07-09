@@ -22,11 +22,6 @@ function quality
     if test "$argv[1]" = "--fix"
       printf "$cyan%s$reset\n" "[+] --fix detected, running format, typecheck and prettier"
       printf "$cyan%s$reset\n" "[+] npx nx affected --target=typecheck,quality --configuration=format"
-      npx nx affected --target=typecheck,quality --configuration=format
-      smart_prettier
-    else if test "$argv[1]" = "--format"
-      printf "$cyan%s$reset\n" "[+] --format detected, running format, typecheck and prettier"
-      printf "$cyan%s$reset\n" "[+] npx nx affected --target=quality --configuration=format"
       npx nx affected --target=quality --configuration=format
       smart_prettier
     else

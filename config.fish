@@ -41,6 +41,7 @@ begin
   alias lint quality
   alias qf "quality --fix"
   alias format "quality --fix"
+  alias tc typecheck
   alias m multi_run
   alias clog "npm run co:login"
   alias prw smart_prettier

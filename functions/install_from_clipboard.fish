@@ -25,7 +25,21 @@ function install_from_clipboard
             set pkgs $pkgs $match[3]
         end
     end
-    # If no install command lines, try to extract all package@version patterns from the clipboard
+
+    # If no install command lines, try to extract JSON-style package entries
+    if test (count $pkgs) -eq 0
+        set -l json_matches (string match -ar -r '"[^"]+":\s*"[^"]+"' -- $clipboard_content)
+        for entry in $json_matches
+            set -l pkg_match (string match -r '"([^"]+)":\s*"([^"]+)"' -- $entry)
+            if test $status -eq 0
+                set -l pkgname $pkg_match[2]
+                set -l pkg_version $pkg_match[3]
+                set pkgs $pkgs "$pkgname@$pkg_version"
+            end
+        end
+    end
+
+    # If still no packages found, try to extract all package@version patterns from the clipboard
     if test (count $pkgs) -eq 0
         set -l matches (string match -ar -r '@?[^@\s,]+(?:/[^@\s,]+)?@[0-9]+\.[0-9]+\.[0-9]+' -- $clipboard_content)
         for pkg in $matches
