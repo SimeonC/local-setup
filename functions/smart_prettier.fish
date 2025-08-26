@@ -3,6 +3,7 @@ function smart_prettier
   if test $status -ne 0
     set modified_files
   end
+  echo "Prettier Version: " (npx prettier --version)
   if test "$argv" = "--force"; or test "$argv" = "-f"
     echo (set_color yellow)"Force formatting all files"(set_color normal)
     npx prettier --log-level error --write .

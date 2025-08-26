@@ -10,7 +10,7 @@ begin
   set -gx PATH $PATH ./node_modules/.bin
   set -gx RAILS_ENV development
   set -gx TEST_ELASTICSEARCH true
-  set -gx PATH /opt/homebrew/bin $PATH
+  set -gx PATH $PATH /opt/homebrew/bin
   set -gx CPATH /opt/homebrew/include
   set -gx LIBRARY_PATH /opt/homebrew/lib
   set -gx DENO_DIR "$HOME/Library/Caches/deno"
@@ -28,6 +28,10 @@ begin
   asdf current
 
   npm config set save-exact=true
+
+  source ~/.config/fish/functions/secure/authorize_npm.fish
+  authorize_npm
+
   alias strt start
   alias dv dev
   alias tst test_run
@@ -49,8 +53,6 @@ begin
   alias "grit_clean" "grit apply --force cleanup; and prettier --log-level=error -w ."
 
 end &> /dev/null
-
-secure_aws_login
 
 # pnpm
 set -gx PNPM_HOME "$HOME/Library/pnpm"

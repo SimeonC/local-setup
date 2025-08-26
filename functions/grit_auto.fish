@@ -33,7 +33,7 @@ function grit_auto
       end
       echo "Committing changes..."
       git add .
-      git commit -m "chore: grit apply $arg" --no-verify
+      git commit -m "🚧 grit apply $arg" --no-verify
     end
     sleep 10
   end
@@ -44,7 +44,7 @@ function grit_auto
     npx eslint --fix $diff_files; or true
     npx prettier --write $diff_files; or true
     git add .
-    git commit -m "chore: format all files" --no-verify
+    git commit -m "🚧 format all files" --no-verify
   end
   sleep 10
 end
