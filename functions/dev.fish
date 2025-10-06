@@ -14,6 +14,8 @@ function dev
       start
     end
   else if test -f ./Gemfile
+    echo "Starting MongoDB"
+    docker start ts_mongodb
     echo "env FORCE_EMBEDDED_SETTINGS=true bundle exec rails s"
     env FORCE_EMBEDDED_SETTINGS=true bundle exec rails s
   else

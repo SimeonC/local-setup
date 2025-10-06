@@ -1,4 +1,4 @@
 function nis
-  npm i
-  npm start
+    echo "Installing dependencies (ignoring scripts)"
+    npm i --ignore-scripts
 end
