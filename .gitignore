@@ -11,3 +11,4 @@ fish_prompt.fish
 fishd.tmp.*
 /grit_patterns/refactor.md
 secure
+/completions/mise.fish

@@ -12,7 +12,7 @@
 brew install git
 brew install jq
 brew install fish
-brew install asdf
+brew install mise
 brew install gum
 ```
 
@@ -54,14 +54,14 @@ This package should be checked out to `~/.config/fish` directory
 
 Go here, pick your favourites https://github.com/jorgebucaran/awsm.fish
 
-### Install runtime plugins
+### Setup mise
+
+Generate fish completions and add idiomatic file support. (See https://mise.jdx.dev/installing-mise.html for more setup notes)
 
 ```sh
-asdf plugin add bun
-asdf plugin add elixir
-asdf plugin add erlang
-asdf plugin add nodejs
-asdf plugin add ruby
+mise completion fish > ~/.config/fish/completions/mise.fish
+mise settings add idiomatic_version_file_enable_tools ruby
+mise settings add idiomatic_version_file_enable_tools node
 ```
 
 ### Setup Talon

@@ -1,5 +1,4 @@
-set -gx ASDF_CONFIG_FILE $HOME/.config/fish/configs/.asdfrc
-set -gx ASDF_NPM_DEFAULT_PACKAGES_FILE $HOME/.config/fish/configs/.default-npm-packages
+set -gx MISE_NODE_DEFAULT_PACKAGES_FILE $HOME/.config/fish/configs/.default-npm-packages
 set -gx LC_ALL en_US.UTF-8
 set -gx LANG en_US.UTF-8
 set -gx RAILS_ENV development
@@ -18,7 +17,6 @@ set -g theme_title_use_abbreviated_path no
 set fish_greeting
 
 # PATH (fast - direct instead of repeated appends)
-fish_add_path --prepend $HOME/.asdf/shims
 fish_add_path --prepend $HOME/.grit/bin
 fish_add_path --append $HOME/bin
 fish_add_path --append ./node_modules/.bin
@@ -31,7 +29,6 @@ set -gx LIBRARY_PATH /opt/homebrew/lib
 
 set -U fish_complete_path $fish_complete_path ~/.config/fish/completions
 
-source /opt/homebrew/opt/asdf/libexec/asdf.fish
 source ~/.config/fish/functions/secure/authorize_npm.fish
 
 # Direnv (usually fast)

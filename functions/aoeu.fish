@@ -1,3 +1,3 @@
-function aoeu --wraps=asdf --description 'alias aoeu=asdf'
-  asdf $argv;
+function aoeu --wraps=mise --description 'alias aoeu=mise'
+  mise $argv;
 end
