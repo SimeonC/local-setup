@@ -330,8 +330,7 @@ function manage_node_versions --description 'Scan development projects and manag
             echo ""
             echo "⬇️  Installing Node.js $ver... ($current_operation/$total_operations)"
 
-            # Use timeout to handle hanging installs and capture signals properly
-            timeout 300 asdf install nodejs $ver
+            asdf install nodejs $ver
             set -l install_status $status
 
             # Check for various failure conditions

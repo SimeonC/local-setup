@@ -16,8 +16,8 @@ function dev
   else if test -f ./Gemfile
     echo "Starting MongoDB"
     docker start ts_mongodb
-    echo "env FORCE_EMBEDDED_SETTINGS=true bundle exec rails s"
-    env FORCE_EMBEDDED_SETTINGS=true bundle exec rails s
+    echo "env FORCE_EMBEDDED_SETTINGS=true TS_IFRAME_DOMAIN=http://localhost:3000 bundle exec rails s"
+    env FORCE_EMBEDDED_SETTINGS=true TS_IFRAME_DOMAIN=http://localhost:3000 bundle exec rails s
   else
     echo "No package.json or Gemfile found"
   end

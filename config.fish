@@ -57,6 +57,7 @@ alias clog "npm run co:login"
 alias prw smart_prettier
 alias grit_refactor "grit apply --force refactor; and prettier --log-level=error -w ."
 alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w ."
+alias record "replayio record"
 
 launchctl setenv PATH "$PATH"
 
@@ -66,3 +67,7 @@ end
 function npx --wraps npx
     _npm_with_auth_refresh npx $argv
 end
+# Added by LM Studio CLI (lms)
+set -gx PATH $PATH $HOME/.lmstudio/bin
+# End of LM Studio CLI section
+

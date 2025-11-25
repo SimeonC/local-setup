@@ -29,7 +29,7 @@ function install_latest_in
         printf "\033[36m*\033[0m\n"
         continue
       end
-      set -l latest_version (npm show $package versions --json | jq -r 'map(select(test("^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$"))) | sort_by(.) | reverse | .[0]')
+      set -l latest_version (npm show $package versions --json | jq -r 'map(select(test("^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$"))) | sort_by(split(".") | map(tonumber)) | reverse | .[0]')
       set -l latest_version_parts (string lower (string split "." $latest_version))
       set -l current_version_parts (string lower (string split "." $current_version))
       if string match -q "^*" "$raw_version" = "$raw_version"
