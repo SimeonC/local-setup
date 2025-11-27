@@ -19,10 +19,11 @@ set fish_greeting
 # PATH (fast - direct instead of repeated appends)
 fish_add_path --prepend $HOME/.grit/bin
 fish_add_path --append $HOME/bin
-fish_add_path --append ./node_modules/.bin
 fish_add_path --append /opt/homebrew/bin
 fish_add_path --append $PNPM_HOME
 fish_add_path --append $HOME/.lmstudio/bin
+# fish_add_path automaticall resolves the path to the absolute path, we don't want that
+set -gx PATH ./node_modules/.bin $PATH
 
 set -gx CPATH /opt/homebrew/include
 set -gx LIBRARY_PATH /opt/homebrew/lib
@@ -56,14 +57,14 @@ alias grit_refactor "grit apply --force refactor; and prettier --log-level=error
 alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w ."
 alias record "replayio record"
 
-launchctl setenv PATH "$PATH"
-
 function npm --wraps npm
     _npm_with_auth_refresh npm $argv
 end
 function npx --wraps npx
     _npm_with_auth_refresh npx $argv
 end
+
+
 # Added by LM Studio CLI (lms)
 set -gx PATH $PATH $HOME/.lmstudio/bin
 # End of LM Studio CLI section
