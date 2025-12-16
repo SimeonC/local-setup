@@ -1,9 +1,13 @@
 ntl
 npm-upgrade
 prettier
+oxfmt
 yarn
 lock-diff
 npm-run-all
 replayio
 nx
 json5
+mcp-remote
+@sveltejs/mcp
+css-mcp

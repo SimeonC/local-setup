@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Google Meets
 // @namespace   Local Scripts
-// @match       *://meet.google.com/*
+// @match       https://meet.google.com/*
 // @grant       none
 // @version     1.0
 // @author      -
@@ -34,10 +34,7 @@ function testEventSequence(event, sequence) {
         break;
       }
       default: {
-        if (
-          `key${command}` !== event.code.toLowerCase() &&
-          command !== event.key.toLowerCase()
-        )
+        if (`key${command}` !== event.code.toLowerCase() && command !== event.key.toLowerCase())
           return false;
       }
     }
@@ -54,13 +51,7 @@ window.addEventListener("keydown", (event) => {
   const commandType = testEvent(event);
   if (commandType === "join") {
     document
-      .evaluate(
-        "//button[contains(., 'Join now')]",
-        document,
-        null,
-        XPathResult.ANY_TYPE,
-        null
-      )
+      .evaluate("//button[contains(., 'Join now')]", document, null, XPathResult.ANY_TYPE, null)
       .iterateNext()
       .click();
   }
@@ -69,9 +60,9 @@ window.addEventListener("keydown", (event) => {
 // ===== start meeting extension
 
 (function () {
-  const ENDPOINT = "http://localhost:1234";
+  const ENDPOINT = "https://localhost:1234";
   const HEARTBEAT_INTERVAL = 10000; // 10 seconds
-  const LEAVE_CALL_SELECTOR = 'button[aria-label="Leave call"]';
+  const LEAVE_CALL_SELECTOR = `button[aria-label="Leave call"]`;
 
   class GoogleMeetMonitor {
     constructor() {
@@ -126,6 +117,41 @@ window.addEventListener("keydown", (event) => {
       this.stopStartObserver();
       this.startEndObserver();
       this.startHeartbeat();
+      this.enableChatSideSwitch();
+    }
+
+    enableChatSideSwitch() {
+      const element = document.createElement("button");
+      document.body.appendChild(element);
+      element.style.setProperty("position", "absolute");
+      element.style.setProperty("top", "16px");
+      element.style.setProperty("left", "50%");
+      element.style.setProperty("transform", "translateX(-50%)");
+      element.style.setProperty("background", "var(--gm3-sys-color-primary)");
+      element.style.setProperty("color", "var(--gm3-sys-color-on-primary)");
+      element.style.setProperty("z-index", "899999");
+      element.style.setProperty("border-radius", "999999px");
+      element.style.setProperty("padding", "12px 16px");
+      element.style.setProperty("border", "none");
+      element.dataset.side = "right";
+      element.innerText = "Swap Sides";
+      element.onclick = () => {
+        const [top, right, bottom, left] = document.querySelector("main").style.inset.split(" ");
+        if (left === undefined) {
+          element.dataset.side = "right";
+          return;
+        }
+        document.querySelector("main").style.inset = `${top} ${left} ${bottom} ${right}`;
+        if (element.dataset.side === "right") {
+          document.querySelector("aside").style.removeProperty("right");
+          document.querySelector("aside").style.left = "16px";
+          element.dataset.side = "left";
+        } else {
+          document.querySelector("aside").style.removeProperty("left");
+          document.querySelector("aside").style.right = "16px";
+          element.dataset.side = "right";
+        }
+      };
     }
 
     async onMeetingEnd() {

@@ -2,13 +2,16 @@
   "name": "local-web-extensions",
   "version": "1.0.0",
   "description": "Used to serve scripts via HTTP server to userscripts plugins like OrangeMonkey",
-  "license": "ISC",
   "author": "",
+  "license": "ISC",
   "type": "commonjs",
   "scripts": {
-    "start": "http-server --port=9876 --watch="
+    "start": "npx http-server --port=9876 --watch="
   },
   "dependencies": {
     "http-server": "14.1.1"
+  },
+  "devDependencies": {
+    "oxfmt": "0.18.0"
   }
 }

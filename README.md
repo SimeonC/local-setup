@@ -78,3 +78,12 @@ After installing Talon main, checkout these repositories and configure;
 mkdir ~/.grit
 ln -s ~/.config/fish/grit_patterns/ ~/.grit/patterns
 ```
+
+### Loading web-extensions
+
+To load/update web extensions it TamperMonkey/OrangeMonkey or similar.
+
+1. `cd ./web-extensions`
+2. `npm run start`
+3. Inside extension settings use "Import from URL"
+4. Enter in `http://127.0.0.1:9876/<script name>`

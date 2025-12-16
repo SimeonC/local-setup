@@ -18,10 +18,7 @@ set fish_greeting
 
 # PATH (fast - direct instead of repeated appends)
 fish_add_path --prepend $HOME/.grit/bin
-fish_add_path --append $HOME/bin
 fish_add_path --append /opt/homebrew/bin
-fish_add_path --append $PNPM_HOME
-fish_add_path --append $HOME/.lmstudio/bin
 # fish_add_path automaticall resolves the path to the absolute path, we don't want that
 set -gx PATH ./node_modules/.bin $PATH
 
@@ -69,3 +66,5 @@ end
 set -gx PATH $PATH $HOME/.lmstudio/bin
 # End of LM Studio CLI section
 
+# Manual activation for VSCode/Cursor terminal sessions compatibility
+mise activate fish | source

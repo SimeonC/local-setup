@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Jira atlassian.net
 // @namespace   Local Scripts
-// @match       *://tablecheck.atlassian.net/jira/*
+// @match       https://tablecheck.atlassian.net/jira/*
 // @grant       none
 // @version     1.0
 // @author      -

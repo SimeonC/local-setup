@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Semaphore
 // @namespace   Local Scripts
-// @match       *://tablecheck.semaphore.com/*
+// @match       https://tablecheck.semaphore.com/*
 // @grant       none
 // @version     1.0
 // @author      -
@@ -40,8 +40,7 @@ function convertCronWhen(element) {
 
     let newContent = "";
     while (replacements.length || interpolation.length) {
-      newContent +=
-        (interpolation.shift() || "") + (replacements.shift() || "");
+      newContent += (interpolation.shift() || "") + (replacements.shift() || "");
     }
     element.textContent = newContent;
     element.setAttribute("cron-when-localised", "true");
@@ -83,11 +82,9 @@ document.onreadystatechange = () => {
 
 // Notifications
 document.addEventListener("DOMContentLoaded", () => {
-  const project = document.querySelector(
-    '#main-content a[href^="/projects"]'
-  ).innerText;
+  const project = document.querySelector(`#main-content a[href^="/projects"]`).innerText;
   const [workflowType, workflowName] = document
-    .querySelector('#main-content > div:nth-child(2) a[href^="/branches"]')
+    .querySelector(`#main-content > div:nth-child(2) a[href^="/branches"]`)
     .parentElement.innerText.split("\n");
 
   class CurrentStatuses {
@@ -107,9 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     getPipelineNodes() {
-      return Array.from(
-        document.querySelectorAll("#workflow-tree-container > div > div")
-      );
+      return Array.from(document.querySelectorAll("#workflow-tree-container > div > div"));
     }
 
     parsePipelineNodes(nodes) {
@@ -125,9 +120,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     parsePipelineText(node) {
-      const divChildren = Array.from(node.childNodes).filter((node) =>
-        this.isDiv(node)
-      );
+      const divChildren = Array.from(node.childNodes).filter((node) => this.isDiv(node));
       const [status, name] = divChildren.map((node) => node.innerHTML);
       return { status, name };
     }
@@ -214,7 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Extract project names from pipeline items
   function extractProjects() {
     const projectLinks = document.querySelectorAll(
-      '#activity_monitor_active_items a[href^="/projects/"]'
+      `#activity_monitor_active_items a[href^="/projects/"]`,
     );
     const projects = new Set();
 
@@ -230,9 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Extract machine types from job stats
   function extractMachineTypes() {
-    const machineSpans = document.querySelectorAll(
-      "#activity_monitor_active_items .f5.mt1 .gray"
-    );
+    const machineSpans = document.querySelectorAll("#activity_monitor_active_items .f5.mt1 .gray");
     const machines = new Set();
 
     machineSpans.forEach((span) => {
@@ -288,9 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Toggle filter state
   function toggleFilter(type, value) {
-    const button = document.querySelector(
-      `[data-type="${type}"][data-value="${value}"]`
-    );
+    const button = document.querySelector(`[data-type="${type}"][data-value="${value}"]`);
     if (!button) return;
 
     const isActive = button.classList.contains("active");
@@ -309,16 +298,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Apply filters to pipeline items
   function applyFilters() {
-    const pipelineItems = document.querySelectorAll(
-      "#activity_monitor_active_items > div"
-    );
+    const pipelineItems = document.querySelectorAll("#activity_monitor_active_items > div");
 
     pipelineItems.forEach((item) => {
       let shouldShow = true;
 
       // Check project filter
       if (activeFilters.projects.size > 0) {
-        const projectLink = item.querySelector('a[href^="/projects/"]');
+        const projectLink = item.querySelector(`a[href^="/projects/"]`);
         const projectName = projectLink ? projectLink.textContent.trim() : "";
         shouldShow = shouldShow && activeFilters.projects.has(projectName);
       }
@@ -357,11 +344,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Update filter button counts
   function updateFilterCounts() {
     const visibleItems = document.querySelectorAll(
-      '#activity_monitor_active_items > div[style*="block"], #activity_monitor_active_items > div:not([style*="none"])'
+      `#activity_monitor_active_items > div[style*="block"], #activity_monitor_active_items > div:not([style*="none"])`,
     );
-    const totalItems = document.querySelectorAll(
-      "#activity_monitor_active_items > div"
-    ).length;
+    const totalItems = document.querySelectorAll("#activity_monitor_active_items > div").length;
 
     const statusDiv = document.querySelector("#filter-status");
     if (statusDiv) {
@@ -405,9 +390,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Create or update filter UI
   function createOrUpdateFilterUI() {
     let filterContainer = document.querySelector("#activity-filter-ui");
-    const activityItems = document.querySelector(
-      "#activity_monitor_active_items"
-    );
+    const activityItems = document.querySelector("#activity_monitor_active_items");
 
     if (!activityItems) return;
 
@@ -555,27 +538,21 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener(
       "mouseenter",
       (e) => {
-        if (
-          e.target.classList.contains("filter-btn") &&
-          !e.target.classList.contains("active")
-        ) {
+        if (e.target.classList.contains("filter-btn") && !e.target.classList.contains("active")) {
           e.target.style.background = "#e0e0e0";
         }
       },
-      true
+      true,
     );
 
     document.addEventListener(
       "mouseleave",
       (e) => {
-        if (
-          e.target.classList.contains("filter-btn") &&
-          !e.target.classList.contains("active")
-        ) {
+        if (e.target.classList.contains("filter-btn") && !e.target.classList.contains("active")) {
           e.target.style.background = "#f5f5f5";
         }
       },
-      true
+      true,
     );
   }
 
@@ -583,7 +560,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function setupMachineQuotaClickHandlers() {
     // Remove existing listeners by cloning nodes (this removes all event listeners)
     const machineQuotas = document.querySelectorAll(
-      "#activity-monitor-gauges .w5-ns, #activity-monitor-self-hosted-gauges .w5-ns"
+      "#activity-monitor-gauges .w5-ns, #activity-monitor-self-hosted-gauges .w5-ns",
     );
 
     machineQuotas.forEach((quota) => {
@@ -678,7 +655,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Observe machine quota containers for changes
     const gaugeContainers = document.querySelectorAll(
-      "#activity-monitor-gauges, #activity-monitor-self-hosted-gauges"
+      "#activity-monitor-gauges, #activity-monitor-self-hosted-gauges",
     );
     gaugeContainers.forEach((container) => {
       if (container) {

@@ -1,24 +1,24 @@
 // ==UserScript==
 // @name        Github Upgrades
 // @namespace   Local Scripts
-// @match       *://github.com/*
+// @match       https://github.com/*
 // @grant       none
-// @version     1.1
+// @version     1.3.5
 // @author      -
 // @description 9/10/2025, 2:59:24 PM
 // ==/UserScript==
 (() => {
   const css = /* CSS */ `
   body, .markdown-body, body .blob-code-inner {
-    font-family: 'Fira Code' !important;
+    font-family: "Fira Code" !important;
   }
   body tt, body code, body samp, body kbd, body pre {
-    font-family: 'Fira Code' !important;
+    font-family:    "Fira Code" !important;
   }
   :root, body {
-    --fontStack-monospace: 'Fira Code' !important;
-    --fontStack-sansSerif: 'Fira Code' !important;
-    --fontStack-system: 'Fira Code' !important;
+    --fontStack-monospace: "Fira Code" !important;
+    --fontStack-sansSerif: "Fira Code" !important;
+    --fontStack-system:      "Fira Code" !important;
   }
 
   #notification-shelf {
@@ -65,14 +65,11 @@ function branchNameToDeploymentHref(branchName) {
 }
 
 function testKey(event, key) {
-  return (
-    `key${key}` === event.code.toLowerCase() || key === event.key.toLowerCase()
-  );
+  return `key${key}` === event.code.toLowerCase() || key === event.key.toLowerCase();
 }
 
 function testEvent(event) {
-  if (!event.ctrlKey || !event.altKey || !event.metaKey || !event.shiftKey)
-    return false;
+  if (!event.ctrlKey || !event.altKey || !event.metaKey || !event.shiftKey) return false;
   if (testKey(event, viewedAndNextKey)) return "view";
   if (testKey(event, nextKey)) return "next";
   if (testKey(event, markAllViewed)) return "all";
@@ -116,10 +113,10 @@ function selectReviewRadio(value) {
 }
 
 function finishReview() {
-  document.querySelector('section button[data-variant="primary"]').click();
+  document.querySelector(`section button[data-variant="primary"]`).click();
   setTimeout(() => {
     const reviewComments = document.querySelectorAll(
-      '[aria-labelledby="anchored-review-title"] details [class^="UnifiedDiffLines"]'
+      `[aria-labelledby="anchored-review-title"] details [class^="UnifiedDiffLines"]`,
     );
     selectReviewRadio(reviewComments.length ? "request changes" : "approve");
   }, 200);
@@ -192,23 +189,15 @@ function splitAndSeparateLast(string, separator) {
 function autoViewLocaleFiles() {
   getAllReviewElements().forEach((r) => {
     const { filePath } = r;
-    const { last: fileName, rest: directories } = splitAndSeparateLast(
-      filePath,
-      "/"
-    );
-    const { last: ext, rest: fileNameParts } = splitAndSeparateLast(
-      fileName,
-      "."
-    );
+    const { last: fileName, rest: directories } = splitAndSeparateLast(filePath, "/");
+    const { last: ext, rest: fileNameParts } = splitAndSeparateLast(fileName, ".");
     if (
       ext !== "json" ||
-      !directories.some((folder) =>
-        ["i18n", "locale", "locales"].includes(folder)
-      )
+      !directories.some((folder) => ["i18n", "locale", "locales"].includes(folder))
     )
       return;
     const isReviewable = ["en", "ja"].some(
-      (l) => fileNameParts.includes(l) || directories.includes(l)
+      (l) => fileNameParts.includes(l) || directories.includes(l),
     );
     if (!isReviewable) r.markViewed();
   });
@@ -217,8 +206,8 @@ function autoViewLocaleFiles() {
 function getContainers() {
   return Array.from(
     document.querySelectorAll(
-      'div:has(>.head-ref),[class*=StateLabel] + div > *:has(a[href^="/tablecheck/"]),div:has(>[class*=StateLabel]) ~ div > *:has(a[href^="/tablecheck/"])'
-    )
+      `div:has(>.head-ref),[class*=StateLabel] + div > *:has(a[href^="/tablecheck/"]),div:has(>[class*=StateLabel]) ~ div > *:has(a[href^="/tablecheck/"])`,
+    ),
   ).map((c, i) => ({
     id: "new-pr-" + i,
     add: (n) => c.append(n),
@@ -236,19 +225,13 @@ function buildButton({ id, href, text }) {
   return linkButton;
 }
 
-function addButtonLinkToContainer({
-  id,
-  getOptions,
-  container: { id: containerId, add },
-}) {
+function addButtonLinkToContainer({ id, getOptions, container: { id: containerId, add } }) {
   const compoundId = id + containerId;
   if (document.getElementById(compoundId)) return true;
   const options = getOptions();
   if (!options) return false;
   if (Array.isArray(options)) {
-    const newOptions = options.filter(
-      ({ id }) => !document.getElementById(compoundId + id)
-    );
+    const newOptions = options.filter(({ id }) => !document.getElementById(compoundId + id));
     newOptions.forEach(({ text, href, id }) => {
       add(buildButton({ id: compoundId + id, href, text }));
     });
@@ -267,10 +250,11 @@ function addButtonLink({ id, getOptions }) {
 
 const jiraRegex = /(?:^|-|\/|\[|\s)(?<ticket>[a-zA-Z]{3,}-[0-9]+)/i;
 const globalJiraRegex = /(?:^|-|\/|\[|\s)(?<ticket>[a-zA-Z]{3,}-[0-9]+)/gi;
-const branchTagSelector =
-  '[href*="/tree/"]:not([href$="main"]):not([href$="develop"]):not([href$="master"])';
+const branchTagSelector = `.head-ref [href*="/tree/"]`;
+let allHeaderButtonsAdded = false;
 function addHeaderButtons() {
-  return [
+  if (allHeaderButtonsAdded) return true;
+  allHeaderButtonsAdded = [
     addButtonLink({
       id: "header-deployments-link",
       getOptions: () => {
@@ -289,22 +273,17 @@ function addHeaderButtons() {
     addButtonLink({
       id: "jira-issue-link",
       getOptions: () => {
-        const branchLink = document
-          .querySelector(branchTagSelector)
-          ?.getAttribute("href");
+        const branchLink = document.querySelector(branchTagSelector)?.getAttribute("href");
         const jiraLinks = Array.from(
-          document.querySelectorAll(
-            '[href^="https://tablecheck.atlassian.net/browse/'
-          )
+          document.querySelectorAll(`[href^="https://tablecheck.atlassian.net/browse/"]`),
         ).map((e) => {
           if (e.closest("code") || e.closest(".TimelineItem")) return false;
           const containingP = e.closest("p");
-          if (containingP && containingP.textContent.match(/example:/i))
-            return false;
+          if (containingP && containingP.textContent.match(/example:/i)) return false;
           return e.getAttribute("href");
         });
         const header = document.querySelector(
-          '[data-component="PH_Title"],.gh-header-title'
+          `[data-component="PH_Title"],.gh-header-title`,
         )?.textContent;
         const linkMatches = [branchLink].concat(jiraLinks).map((i) => {
           if (!i) return undefined;
@@ -313,16 +292,10 @@ function addHeaderButtons() {
         });
         const allMatches = linkMatches
           .concat(
-            header
-              ? Array.from(header.matchAll(globalJiraRegex)).map(
-                  (m) => m.groups?.ticket
-                )
-              : []
+            header ? Array.from(header.matchAll(globalJiraRegex)).map((m) => m.groups?.ticket) : [],
           )
           .filter((i) => !!i);
-        const uniqueMatches = Array.from(
-          new Set(allMatches.map((s) => s?.toUpperCase())).values()
-        );
+        const uniqueMatches = Array.from(new Set(allMatches.map((s) => s?.toUpperCase())).values());
         return uniqueMatches.map((l) => ({
           id: l,
           href: `https://tablecheck.atlassian.net/browse/${l}`,
@@ -335,9 +308,7 @@ function addHeaderButtons() {
 
 function checkForCursorLinks() {
   document
-    .querySelectorAll(
-      '[href^="https://cursor.com/open"]:not([target="_blank"])'
-    )
+    .querySelectorAll(`[href^="https://cursor.com/open"]:not([target="_blank"])`)
     .forEach((n) => {
       n.setAttribute("target", "_blank");
     });
@@ -351,24 +322,42 @@ function debounce(cb) {
   };
 }
 
-function setupDom() {
-  addHeaderButtons();
-  let hasRunLocales = false;
-  let hasRunHeaderButtons = false;
-  const mut1 = new MutationObserver(
+let commentReviewMutationObserver;
+function setupCommentReviewMutationObserver() {
+  const targetEl = document.querySelector('[data-hpc="true"] ');
+  if (commentReviewMutationObserver || !targetEl) return !!commentReviewMutationObserver;
+  commentReviewMutationObserver = new MutationObserver(
     debounce(() => {
-      if (!hasRunLocales) {
-        autoViewLocaleFiles();
-        hasRunLocales = true;
-      }
-      if (!hasRunHeaderButtons) {
-        hasRunHeaderButtons = addHeaderButtons();
-      }
+      if (document.querySelectorAll('[data-hpc="true"] > div [aria-label^="Loading"]').length)
+        return;
+      autoViewLocaleFiles();
       checkForCursorLinks();
       evaluatePendingCommand();
-    })
+      commentReviewMutationObserver.disconnect();
+      commentReviewMutationObserver = undefined;
+    }),
   );
-  mut1.observe(document.querySelector("body"), {
+  commentReviewMutationObserver.observe(targetEl, {
+    childList: true,
+    subtree: true,
+  });
+  return true;
+}
+
+let bodyMutationObserver;
+function setupDom() {
+  if (bodyMutationObserver) return;
+  addHeaderButtons();
+  bodyMutationObserver = new MutationObserver(
+    debounce(() => {
+      const headerButtonsAdded = addHeaderButtons();
+      const commentReviewMutationObserverSetup = setupCommentReviewMutationObserver();
+      if (!headerButtonsAdded || !commentReviewMutationObserverSetup) return;
+      bodyMutationObserver.disconnect();
+      bodyMutationObserver = undefined;
+    }),
+  );
+  bodyMutationObserver.observe(document.querySelector("body"), {
     childList: true,
     subtree: true,
   });
