@@ -3,7 +3,7 @@
 // @namespace   Local Scripts
 // @match       https://github.com/*
 // @grant       none
-// @version     1.3.5
+// @version     1.4.8
 // @author      -
 // @description 9/10/2025, 2:59:24 PM
 // ==/UserScript==
@@ -140,6 +140,19 @@ function evaluatePendingCommand() {
 function storePendingCommandOrExec(c, f = () => {}) {
   if (!pageIsLoading()) return f();
   lastCommand = c;
+  waitForPageToLoad();
+}
+
+let pageLoadTimeout;
+function waitForPageToLoad() {
+  if (pageLoadTimeout) return;
+  pageLoadTimeout = setTimeout(() => {
+    pageLoadTimeout = undefined;
+    if (pageIsLoading()) {
+      return waitForPageToLoad();
+    }
+    evaluatePendingCommand();
+  }, 1000);
 }
 
 function evaluateCommand(commandType) {
@@ -152,8 +165,11 @@ function evaluateCommand(commandType) {
     let next;
     let first;
     for (const r of allReviews) {
+      if (!isReviewable(r)) {
+        if (!r.isViewed) r.markViewed();
+        continue;
+      }
       if (foundActive) {
-        if (r.isViewed) continue;
         next = r;
         first = first ?? r;
         break;
@@ -186,21 +202,24 @@ function splitAndSeparateLast(string, separator) {
   };
 }
 
-function autoViewLocaleFiles() {
-  getAllReviewElements().forEach((r) => {
-    const { filePath } = r;
+/**
+ *
+ * @param {*} r review element
+ */
+function isReviewable(r) {
+    const { filePath, isViewed } = r;
+    if (isViewed) return false;
     const { last: fileName, rest: directories } = splitAndSeparateLast(filePath, "/");
     const { last: ext, rest: fileNameParts } = splitAndSeparateLast(fileName, ".");
     if (
       ext !== "json" ||
       !directories.some((folder) => ["i18n", "locale", "locales"].includes(folder))
     )
-      return;
+      return true;
     const isReviewable = ["en", "ja"].some(
       (l) => fileNameParts.includes(l) || directories.includes(l),
     );
-    if (!isReviewable) r.markViewed();
-  });
+    return isReviewable;
 }
 
 function getContainers() {
@@ -211,6 +230,7 @@ function getContainers() {
   ).map((c, i) => ({
     id: "new-pr-" + i,
     add: (n) => c.append(n),
+    element: c,
   }));
 }
 
@@ -225,10 +245,10 @@ function buildButton({ id, href, text }) {
   return linkButton;
 }
 
-function addButtonLinkToContainer({ id, getOptions, container: { id: containerId, add } }) {
+function addButtonLinkToContainer({ id, getOptions, container: { id: containerId, add, element } }) {
   const compoundId = id + containerId;
   if (document.getElementById(compoundId)) return true;
-  const options = getOptions();
+  const options = getOptions(element);
   if (!options) return false;
   if (Array.isArray(options)) {
     const newOptions = options.filter(({ id }) => !document.getElementById(compoundId + id));
@@ -242,23 +262,24 @@ function addButtonLinkToContainer({ id, getOptions, container: { id: containerId
   return true;
 }
 
-function addButtonLink({ id, getOptions }) {
-  return getContainers()
+function addButtonLink(containers, { id, getOptions }) {
+  return containers
     .map((container) => addButtonLinkToContainer({ id, getOptions, container }))
     .some((v) => !!v);
 }
 
 const jiraRegex = /(?:^|-|\/|\[|\s)(?<ticket>[a-zA-Z]{3,}-[0-9]+)/i;
 const globalJiraRegex = /(?:^|-|\/|\[|\s)(?<ticket>[a-zA-Z]{3,}-[0-9]+)/gi;
-const branchTagSelector = `.head-ref [href*="/tree/"]`;
+const branchTagSelector = `[href*="/tree/"]`;
 let allHeaderButtonsAdded = false;
 function addHeaderButtons() {
   if (allHeaderButtonsAdded) return true;
+  const containers = getContainers();
   allHeaderButtonsAdded = [
-    addButtonLink({
+    addButtonLink(containers, {
       id: "header-deployments-link",
-      getOptions: () => {
-        const branchLink = document.querySelector(branchTagSelector);
+      getOptions: (element) => {
+        const branchLink = Array.from(element.querySelectorAll(branchTagSelector)).at(-1);
         if (!branchLink) return;
         const branchParts = branchLink.getAttribute("href").split("/");
         const branchName = branchParts[branchParts.length - 1];
@@ -270,7 +291,7 @@ function addHeaderButtons() {
         };
       },
     }),
-    addButtonLink({
+    addButtonLink(containers, {
       id: "jira-issue-link",
       getOptions: () => {
         const branchLink = document.querySelector(branchTagSelector)?.getAttribute("href");
@@ -306,61 +327,19 @@ function addHeaderButtons() {
   ].every((v) => !!v);
 }
 
-function checkForCursorLinks() {
-  document
-    .querySelectorAll(`[href^="https://cursor.com/open"]:not([target="_blank"])`)
-    .forEach((n) => {
-      n.setAttribute("target", "_blank");
-    });
-}
+document.addEventListener(`pointerdown`, (e) => {
+  if (e.currentTarget.tagName === `A` && e.currentTarget.getAttribute(`href`)?.startsWith(`https://cursor.com/open/`)) {
+    e.currentTarget.setAttribute(`target`, `_blank`);
+  }
+});
 
-let debounceTimeout;
-function debounce(cb) {
-  return () => {
-    clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(cb, 200);
-  };
-}
-
-let commentReviewMutationObserver;
-function setupCommentReviewMutationObserver() {
-  const targetEl = document.querySelector('[data-hpc="true"] ');
-  if (commentReviewMutationObserver || !targetEl) return !!commentReviewMutationObserver;
-  commentReviewMutationObserver = new MutationObserver(
-    debounce(() => {
-      if (document.querySelectorAll('[data-hpc="true"] > div [aria-label^="Loading"]').length)
-        return;
-      autoViewLocaleFiles();
-      checkForCursorLinks();
-      evaluatePendingCommand();
-      commentReviewMutationObserver.disconnect();
-      commentReviewMutationObserver = undefined;
-    }),
-  );
-  commentReviewMutationObserver.observe(targetEl, {
-    childList: true,
-    subtree: true,
-  });
-  return true;
-}
-
-let bodyMutationObserver;
+let headerButtonsInterval;
 function setupDom() {
-  if (bodyMutationObserver) return;
+  if (headerButtonsInterval) return;
   addHeaderButtons();
-  bodyMutationObserver = new MutationObserver(
-    debounce(() => {
-      const headerButtonsAdded = addHeaderButtons();
-      const commentReviewMutationObserverSetup = setupCommentReviewMutationObserver();
-      if (!headerButtonsAdded || !commentReviewMutationObserverSetup) return;
-      bodyMutationObserver.disconnect();
-      bodyMutationObserver = undefined;
-    }),
-  );
-  bodyMutationObserver.observe(document.querySelector("body"), {
-    childList: true,
-    subtree: true,
-  });
+  headerButtonsInterval = setInterval(() => {
+    addHeaderButtons();
+  }, 5000);
 }
 
 window.addEventListener("click", (e) => {

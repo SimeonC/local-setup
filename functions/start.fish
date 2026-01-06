@@ -21,12 +21,9 @@ function start
     else
       npm start
     end
-  else if test -f ./Gemfile
-    echo "Starting MongoDB"
-    docker start ts_mongodb
-    echo "bundle exec rails s"
-    bundle exec rails s
+  else if test -f ./local_start.fish
+    source ./local_start.fish
   else
-    echo "No package.json or Gemfile found"
+    echo "No package.json or local_start.fish found"
   end
 end

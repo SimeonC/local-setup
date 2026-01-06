@@ -1,5 +1,6 @@
 .DS_Store
 /fish_variables
+/fish_variables.*
 /functions/secure_*
 /functions/*.cache
 /functions/_tide*
@@ -12,3 +13,4 @@ fishd.tmp.*
 /grit_patterns/refactor.md
 secure
 /completions/mise.fish
+.cursor/debug.log

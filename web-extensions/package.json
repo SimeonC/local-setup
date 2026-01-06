@@ -4,14 +4,18 @@
   "description": "Used to serve scripts via HTTP server to userscripts plugins like OrangeMonkey",
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
-    "start": "npx http-server --port=9876 --watch="
+    "start": "node server.ts"
   },
   "dependencies": {
-    "http-server": "14.1.1"
+    "chokidar": "5.0.0",
+    "express": "5.2.1"
   },
   "devDependencies": {
-    "oxfmt": "0.18.0"
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.0.3",
+    "oxfmt": "0.22.0",
+    "typescript": "^5.9.3"
   }
 }

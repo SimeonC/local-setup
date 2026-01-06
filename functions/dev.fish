@@ -13,12 +13,9 @@ function dev
       echo "No `dev` or `test:dev` script found in package.json, trying `start`"
       start
     end
-  else if test -f ./Gemfile
-    echo "Starting MongoDB"
-    docker start ts_mongodb
-    echo "env FORCE_EMBEDDED_SETTINGS=true TS_IFRAME_DOMAIN=http://localhost:3000 bundle exec rails s"
-    env FORCE_EMBEDDED_SETTINGS=true TS_IFRAME_DOMAIN=http://localhost:3000 bundle exec rails s
+  else if test -f ./local_dev.fish
+    source ./local_dev.fish
   else
-    echo "No package.json or Gemfile found"
+    start
   end
 end
