@@ -14,3 +14,4 @@ fishd.tmp.*
 secure
 /completions/mise.fish
 .cursor/debug.log
+fish_variables*

@@ -2,8 +2,9 @@
 // @name        Google Meets
 // @namespace   Local Scripts
 // @match       https://meet.google.com/*
+// @include     *://meet.google.com/*
 // @grant       none
-// @version     1.0
+// @version     1.0.1
 // @author      -
 // @description 9/10/2025, 3:07:34 PM
 // ==/UserScript==

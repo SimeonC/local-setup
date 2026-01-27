@@ -3,7 +3,7 @@
 // @namespace   Local Scripts
 // @match       https://github.com/*
 // @grant       none
-// @version     1.4.8
+// @version     1.4.17
 // @author      -
 // @description 9/10/2025, 2:59:24 PM
 // ==/UserScript==
@@ -41,13 +41,15 @@
   document.head.appendChild(style);
 })();
 
-// change the following two key combos as you like
-// this key combo will mark the current focused file as viewed and jump to the next unviewed file
-const viewedAndNextKey = "v";
-// this key combo will just jump to the next unviewed file
-const nextKey = "w";
-// this key combo marks all files as "viewed"
-const markAllViewed = "z";
+// change the following key combinations as you like
+const keyCombinations = Object.entries({
+  // this key combo will mark the current focused file as viewed and jump to the next unviewed file
+  v: "view",
+  // this key combo will just jump to the next unviewed file
+  w: "next",
+  // this key combo marks all files as "viewed"
+  z: "all",
+});
 
 // edit this function to work however you need it to, return undefined to not show the deployment tag
 function branchNameToDeploymentHref(branchName) {
@@ -70,9 +72,9 @@ function testKey(event, key) {
 
 function testEvent(event) {
   if (!event.ctrlKey || !event.altKey || !event.metaKey || !event.shiftKey) return false;
-  if (testKey(event, viewedAndNextKey)) return "view";
-  if (testKey(event, nextKey)) return "next";
-  if (testKey(event, markAllViewed)) return "all";
+  for (const [key, value] of keyCombinations) {
+    if (testKey(event, key)) return value;
+  }
   return false;
 }
 
@@ -207,19 +209,19 @@ function splitAndSeparateLast(string, separator) {
  * @param {*} r review element
  */
 function isReviewable(r) {
-    const { filePath, isViewed } = r;
-    if (isViewed) return false;
-    const { last: fileName, rest: directories } = splitAndSeparateLast(filePath, "/");
-    const { last: ext, rest: fileNameParts } = splitAndSeparateLast(fileName, ".");
-    if (
-      ext !== "json" ||
-      !directories.some((folder) => ["i18n", "locale", "locales"].includes(folder))
-    )
-      return true;
-    const isReviewable = ["en", "ja"].some(
-      (l) => fileNameParts.includes(l) || directories.includes(l),
-    );
-    return isReviewable;
+  const { filePath, isViewed } = r;
+  if (isViewed) return false;
+  const { last: fileName, rest: directories } = splitAndSeparateLast(filePath, "/");
+  const { last: ext, rest: fileNameParts } = splitAndSeparateLast(fileName, ".");
+  if (
+    ext !== "json" ||
+    !directories.some((folder) => ["i18n", "locale", "locales"].includes(folder))
+  )
+    return true;
+  const isReviewable = ["en", "ja"].some(
+    (l) => fileNameParts.includes(l) || directories.includes(l),
+  );
+  return isReviewable;
 }
 
 function getContainers() {
@@ -245,7 +247,11 @@ function buildButton({ id, href, text }) {
   return linkButton;
 }
 
-function addButtonLinkToContainer({ id, getOptions, container: { id: containerId, add, element } }) {
+function addButtonLinkToContainer({
+  id,
+  getOptions,
+  container: { id: containerId, add, element },
+}) {
   const compoundId = id + containerId;
   if (document.getElementById(compoundId)) return true;
   const options = getOptions(element);
@@ -328,9 +334,13 @@ function addHeaderButtons() {
 }
 
 document.addEventListener(`pointerdown`, (e) => {
-  if (e.currentTarget.tagName === `A` && e.currentTarget.getAttribute(`href`)?.startsWith(`https://cursor.com/open/`)) {
-    e.currentTarget.setAttribute(`target`, `_blank`);
-  }
+  const target = e.target?.closest('a');
+  if (!target || target.getAttribute(`target`) === `_blank`) return;
+  const href = target.getAttribute(`href`);
+  if (!href || !/^https?:\/\//.test(href)) return;
+  const url = new URL(href, window.location.origin);
+  if (url.hostname.endsWith("github.com")) return;
+  target.setAttribute(`target`, `_blank`);
 });
 
 let headerButtonsInterval;
@@ -341,15 +351,6 @@ function setupDom() {
     addHeaderButtons();
   }, 5000);
 }
-
-window.addEventListener("click", (e) => {
-  if (
-    e.target.classList.contains("tabnav-tab") ||
-    e.target.parentElement.classList.contains("tabnav-tab")
-  ) {
-    setupDom();
-  }
-});
 
 setTimeout(() => {
   setupDom();

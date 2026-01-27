@@ -7,7 +7,7 @@ function _npm_with_auth_refresh
 
     if test $status_code -ne 0
         set -l error_output (command $cmd $args 2>&1 | tail -n 20)
-        if string match -q -r "(401|unauthorized)" $error_output
+        if string match -q -r -- "(401|unauthorized)" $error_output
             echo "🔑 Token expired, refreshing..."
             if authorize_npm
                 echo "🔄 Retrying $cmd $args"

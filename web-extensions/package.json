@@ -2,11 +2,12 @@
   "name": "local-web-extensions",
   "version": "1.0.0",
   "description": "Used to serve scripts via HTTP server to userscripts plugins like OrangeMonkey",
-  "author": "",
   "license": "ISC",
+  "author": "",
   "type": "module",
   "scripts": {
-    "start": "node server.ts"
+    "start": "node server.ts",
+    "format": "oxfmt ."
   },
   "dependencies": {
     "chokidar": "5.0.0",

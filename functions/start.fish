@@ -3,23 +3,23 @@ function start
     if command -v jq > /dev/null
       set scripts (jq -r '.scripts | keys[]' ./package.json)
       if contains start $scripts
-        echo "npm start"
-        npm start
+        echo "npm start -- $argv"
+        npm start -- $argv
       else if contains dev $scripts
-        echo "npm run dev"
-        npm run dev
+        echo "npm run dev -- $argv"
+        npm run dev -- $argv
       else if contains serve $scripts
-        echo "npm run serve"
-        npm run serve
+        echo "npm run serve -- $argv"
+        npm run serve -- $argv
       else if contains develop $scripts
-        echo "npm run develop"
-        npm run develop
+        echo "npm run develop -- $argv"
+        npm run develop -- $argv
       else
         echo "No suitable start script found. Available scripts:"
         echo $scripts
       end
     else
-      npm start
+      npm start -- $argv
     end
   else if test -f ./local_start.fish
     source ./local_start.fish
