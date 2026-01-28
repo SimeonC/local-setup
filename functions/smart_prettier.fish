@@ -5,12 +5,12 @@ function smart_prettier
     end
 
     set formatter ""
-    set formatter_args ""
+    set formatter_args
 
     if test -f package.json
         if grep -q '"prettier"' package.json
             set formatter prettier
-            set formatter_args "--log-level error --write"
+            set formatter_args --log-level error --write
         else if grep -q '"oxfmt"' package.json
             set formatter oxfmt
             set formatter_args --write
