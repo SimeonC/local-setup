@@ -72,11 +72,12 @@ After installing Talon main, checkout these repositories and configure;
 - https://github.com/cursorless-dev/cursorless
 - https://github.com/chaosparrot/talon_hud
 
-### Setup local grit
+### Run setup script
+
+Creates symlinks for Claude Code config (`CLAUDE.md`, `skills/`) and grit patterns.
 
 ```sh
-mkdir ~/.grit
-ln -s ~/.config/fish/grit_patterns/ ~/.grit/patterns
+./setup.sh
 ```
 
 ### Loading web-extensions
