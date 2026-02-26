@@ -17,18 +17,29 @@ function quality
     end
   end
 
+  set -l ran_nx_quality 0
   if test -f ./nx.json
-    printf "$green%s$reset\n" "NX repository detected"
-    if test "$argv[1]" = "--fix"
-      printf "$cyan%s$reset\n" "[+] --fix detected, running format, typecheck and prettier"
-      printf "$cyan%s$reset\n" "[+] npx nx affected --target=typecheck,quality --configuration=format"
-      npx nx affected --target=quality --configuration=format
-      smart_prettier
+    set -l quality_projects (npx nx show projects --with-target=quality 2>/dev/null)
+    set -l typecheck_projects (npx nx show projects --with-target=typecheck 2>/dev/null)
+    set -l quality_count (count $quality_projects)
+    set -l typecheck_count (count $typecheck_projects)
+    if test $quality_count -gt 0; or test $typecheck_count -gt 0
+      printf "$green%s$reset\n" "NX repository detected"
+      if test "$argv[1]" = "--fix"
+        printf "$cyan%s$reset\n" "[+] --fix detected, running format, typecheck and prettier"
+        printf "$cyan%s$reset\n" "[+] npx nx affected --target=typecheck,quality --configuration=format"
+        npx nx affected --target=quality --configuration=format
+        smart_prettier
+      else
+        printf "$cyan%s$reset\n" "npx nx affected --target=quality"
+        npx nx affected --target=quality
+      end
+      set ran_nx_quality 1
     else
-      printf "$cyan%s$reset\n" "npx nx affected --target=quality"
-      npx nx affected --target=quality
+      printf "$yellow%s$reset\n" "No Nx quality or typecheck targets, falling back to package.json"
     end
-  else if test -f ./package.json
+  end
+  if test -f ./package.json; and test "$ran_nx_quality" -eq 0
     if test "$argv[1]" = "--fix"
       if string match -r "\"lint:fix\":\\s*\"[^\"\\n]+" -q -- (cat ./package.json)
         printf "$cyan%s$reset\n" "npm run lint:fix"

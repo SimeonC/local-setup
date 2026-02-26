@@ -1,5 +1,7 @@
 function start
-  if test -f ./package.json
+  if test -f ./local_start.fish
+    source ./local_start.fish
+  else if test -f ./package.json
     if command -v jq > /dev/null
       set scripts (jq -r '.scripts | keys[]' ./package.json)
       if contains start $scripts
@@ -21,8 +23,6 @@ function start
     else
       npm start -- $argv
     end
-  else if test -f ./local_start.fish
-    source ./local_start.fish
   else
     echo "No package.json or local_start.fish found"
   end

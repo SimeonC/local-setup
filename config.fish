@@ -9,6 +9,8 @@ set -gx EDITOR "cursor --wait"
 set -gx VISUAL "cursor --wait"
 set -gx VIEWER "cursor"
 
+set -gx CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS "1"
+
 # Theme settings
 set -g theme_title_display_process no
 set -g theme_title_display_path no
@@ -19,6 +21,7 @@ set fish_greeting
 # PATH (fast - direct instead of repeated appends)
 fish_add_path --prepend $HOME/.grit/bin
 fish_add_path --append /opt/homebrew/bin
+fish_add_path --append ~/.local/bin
 # fish_add_path automaticall resolves the path to the absolute path, we don't want that
 set -gx PATH ./node_modules/.bin $PATH
 
@@ -28,6 +31,7 @@ set -gx LIBRARY_PATH /opt/homebrew/lib
 set -U fish_complete_path $fish_complete_path ~/.config/fish/completions
 
 source ~/.config/fish/functions/secure/authorize_npm.fish
+source ~/.config/fish/functions/secure/secure_env.fish
 
 # Direnv (usually fast)
 direnv hook fish | source
@@ -67,3 +71,6 @@ mise activate fish | source
 set -gx PATH $PATH /Users/simeoncheeseman/.lmstudio/bin
 # End of LM Studio CLI section
 
+
+# opencode
+fish_add_path /Users/simeoncheeseman/.opencode/bin
