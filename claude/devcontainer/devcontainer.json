@@ -1,0 +1,37 @@
+{
+  "name": "${localWorkspaceFolderBasename}",
+  "build": { "dockerfile": "Dockerfile" },
+  "mounts": [
+    // Fish config — mount subdirs individually so fish_variables is writable (container-local)
+    // but functions/completions/etc remain read-only from host
+    "source=${localEnv:HOME}/.config/fish/config.fish,target=/home/dev/.config/fish/config.fish,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/fish/functions,target=/home/dev/.config/fish/functions,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/fish/completions,target=/home/dev/.config/fish/completions,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/fish/conf.d,target=/home/dev/.config/fish/conf.d,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/fish/themes,target=/home/dev/.config/fish/themes,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/fish/claude,target=/home/dev/.config/fish/claude,type=bind,readonly",
+    // Stage fish_variables for copy — mounted read-only, copied to writable location in postCreateCommand
+    "source=${localEnv:HOME}/.config/fish/fish_variables,target=/tmp/host-fish-variables,type=bind,readonly",
+    // Claude auth and config
+    "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",
+    // Claude config, hooks, session files — read-write for monitor
+    "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
+    // AWS credentials for CodeArtifact / other AWS access
+    "source=${localEnv:HOME}/.aws,target=/home/dev/.aws,type=bind,readonly",
+    // Isolated node_modules volume — prevents macOS binaries leaking into the Linux container
+    "source=${devcontainerId}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
+  "postCreateCommand": "mkdir -p ~/.config/fish && cp /tmp/host-fish-variables ~/.config/fish/fish_variables && ~/.local/bin/mise trust --all && ~/.local/bin/mise install -y",
+  "remoteUser": "dev",
+  "remoteEnv": {
+    "GHOSTTY_RESOURCES_DIR": "${localEnv:GHOSTTY_RESOURCES_DIR}",
+    "CLAUDE_MONITOR_ID": "${localEnv:CLAUDE_MONITOR_ID}",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "MISE_TRUSTED_CONFIG_PATHS": "${containerWorkspaceFolder}",
+    // fish_add_path can't persist to fish_variables (read-only mount), so set PATH explicitly
+    "PATH": "/home/dev/.local/bin:/home/dev/.local/share/claude:${containerEnv:PATH}",
+    "LANG": "en_US.UTF-8",
+    "LC_ALL": "en_US.UTF-8",
+    "DEVCONTAINER": "1"
+  }
+}

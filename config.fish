@@ -18,6 +18,14 @@ set -g theme_title_display_user no
 set -g theme_title_use_abbreviated_path no
 set fish_greeting
 
+# Canonicalize PWD case after session restore (macOS case-insensitive FS)
+if test (uname) = Darwin -a -d $PWD
+    set -l canonical (stat -f "%N" $PWD 2>/dev/null)
+    if test -n "$canonical"
+        builtin cd $canonical
+    end
+end
+
 # PATH (fast - direct instead of repeated appends)
 fish_add_path --prepend $HOME/.grit/bin
 fish_add_path --append /opt/homebrew/bin
