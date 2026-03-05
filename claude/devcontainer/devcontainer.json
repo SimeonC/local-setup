@@ -21,7 +21,7 @@
     // Isolated node_modules volume — prevents macOS binaries leaking into the Linux container
     "source=${devcontainerId}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
   ],
-  "postCreateCommand": "mkdir -p ~/.config/fish && cp /tmp/host-fish-variables ~/.config/fish/fish_variables && ~/.local/bin/mise trust --all && ~/.local/bin/mise install -y",
+  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && ~/.local/bin/mise trust && ~/.local/bin/mise install -y",
   "remoteUser": "dev",
   "remoteEnv": {
     "GHOSTTY_RESOURCES_DIR": "${localEnv:GHOSTTY_RESOURCES_DIR}",
