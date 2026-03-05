@@ -1,6 +1,6 @@
 {
   "name": "${localWorkspaceFolderBasename}",
-  "build": { "dockerfile": "Dockerfile" },
+  "build": { "dockerfile": "Dockerfile", "context": "../.." },
   "mounts": [
     // Fish config — mount subdirs individually so fish_variables is writable (container-local)
     // but functions/completions/etc remain read-only from host
@@ -12,20 +12,35 @@
     "source=${localEnv:HOME}/.config/fish/claude,target=/home/dev/.config/fish/claude,type=bind,readonly",
     // Also mount at the host's absolute path so symlinks in ~/.claude/ resolve
     "source=${localEnv:HOME}/.config/fish/claude,target=${localEnv:HOME}/.config/fish/claude,type=bind,readonly",
+    // Fisher plugin list
+    "source=${localEnv:HOME}/.config/fish/fish_plugins,target=/home/dev/.config/fish/fish_plugins,type=bind,readonly",
     // Stage fish_variables for copy — mounted read-only, copied to writable location in postCreateCommand
     "source=${localEnv:HOME}/.config/fish/fish_variables,target=/tmp/host-fish-variables,type=bind,readonly",
     // Claude auth and config
     "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",
     // Claude config, hooks, session files — read-write for monitor
     "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
+    // Stage git config for copy — mounted read-only, copied to writable location in postCreateCommand
+    "source=${localEnv:HOME}/.gitconfig,target=/tmp/host-gitconfig,type=bind,readonly",
+    // Global gitignore
+    "source=${localEnv:HOME}/.gitignore_global,target=/home/dev/.gitignore_global,type=bind,readonly",
+    // Stage SSH config for copy — SSH requires strict ownership/permissions that bind mounts can't satisfy
+    "source=${localEnv:HOME}/.ssh,target=/tmp/host-ssh,type=bind,readonly",
+    // SSH agent socket — requires `colima start --ssh-agent` (or Docker Desktop)
+    "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind",
+    // Tmux config
+    "source=${localEnv:HOME}/.tmux.conf,target=/home/dev/.tmux.conf,type=bind,readonly",
     // AWS credentials for CodeArtifact / other AWS access
     "source=${localEnv:HOME}/.aws,target=/home/dev/.aws,type=bind,readonly",
+    // GitHub CLI auth config
+    "source=${localEnv:HOME}/.config/gh,target=/home/dev/.config/gh,type=bind,readonly",
     // Isolated node_modules volume — prevents macOS binaries leaking into the Linux container
     "source=${devcontainerId}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
   ],
-  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && ~/.local/bin/mise trust && ~/.local/bin/mise install -y",
+  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && cp /tmp/host-gitconfig ~/.gitconfig && sed -i 's|/Users/simeoncheeseman|/home/dev|g' ~/.gitconfig && git config --global commit.gpgsign false && git config --global safe.directory '*' && cp -r /tmp/host-ssh ~/.ssh && chmod 700 ~/.ssh && chmod 600 ~/.ssh/config 2>/dev/null; chmod 600 ~/.ssh/id_* 2>/dev/null; sudo chown -R dev:dev ${containerWorkspaceFolder}/node_modules && ~/.local/bin/mise trust && ~/.local/bin/mise install -y && fish -c authorize_npm",
   "remoteUser": "dev",
   "remoteEnv": {
+    "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock",
     "GHOSTTY_RESOURCES_DIR": "${localEnv:GHOSTTY_RESOURCES_DIR}",
     "CLAUDE_MONITOR_ID": "${localEnv:CLAUDE_MONITOR_ID}",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
@@ -34,6 +49,8 @@
     "PATH": "/home/dev/.local/bin:/home/dev/.local/share/claude:${containerEnv:PATH}",
     "LANG": "en_US.UTF-8",
     "LC_ALL": "en_US.UTF-8",
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
     "DEVCONTAINER": "1"
   }
 }
