@@ -37,7 +37,7 @@
     // Isolated node_modules volume — prevents macOS binaries leaking into the Linux container
     "source=${devcontainerId}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
   ],
-  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && cp /tmp/host-gitconfig ~/.gitconfig && sed -i 's|/Users/simeoncheeseman|/home/dev|g' ~/.gitconfig && git config --global commit.gpgsign false && git config --global safe.directory '*' && cp -r /tmp/host-ssh ~/.ssh && chmod 700 ~/.ssh && chmod 600 ~/.ssh/config 2>/dev/null; chmod 600 ~/.ssh/id_* 2>/dev/null; sudo chown -R dev:dev ${containerWorkspaceFolder}/node_modules && ~/.local/bin/mise trust && ~/.local/bin/mise install -y && fish -c authorize_npm",
+  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && cp /tmp/host-gitconfig ~/.gitconfig && sed -i 's|/Users/simeoncheeseman|/home/dev|g' ~/.gitconfig && git config --global commit.gpgsign false && git config --global safe.directory '*' && cp -r /tmp/host-ssh ~/.ssh && chmod 700 ~/.ssh && chmod 600 ~/.ssh/config 2>/dev/null; chmod 600 ~/.ssh/id_* 2>/dev/null; sudo chown -R dev:dev ${containerWorkspaceFolder}/node_modules && ~/.local/bin/mise trust && ~/.local/bin/mise install -y && fish -c authorize_npm && if [ -x .devcontainer/setup.sh ]; then ~/.local/bin/mise exec -- .devcontainer/setup.sh; fi",
   "remoteUser": "dev",
   "remoteEnv": {
     "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock",
