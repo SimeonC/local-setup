@@ -10,6 +10,8 @@
     "source=${localEnv:HOME}/.config/fish/conf.d,target=/home/dev/.config/fish/conf.d,type=bind,readonly",
     "source=${localEnv:HOME}/.config/fish/themes,target=/home/dev/.config/fish/themes,type=bind,readonly",
     "source=${localEnv:HOME}/.config/fish/claude,target=/home/dev/.config/fish/claude,type=bind,readonly",
+    // Also mount at the host's absolute path so symlinks in ~/.claude/ resolve
+    "source=${localEnv:HOME}/.config/fish/claude,target=${localEnv:HOME}/.config/fish/claude,type=bind,readonly",
     // Stage fish_variables for copy — mounted read-only, copied to writable location in postCreateCommand
     "source=${localEnv:HOME}/.config/fish/fish_variables,target=/tmp/host-fish-variables,type=bind,readonly",
     // Claude auth and config
