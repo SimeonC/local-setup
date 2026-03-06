@@ -8,6 +8,11 @@ ARG USER_GID=1000
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
+# Git PPA — need >= 2.45.0 for extensions.relativeWorktrees (worktree devcontainers)
+RUN apt-get update -q && apt-get install -y -q --no-install-recommends software-properties-common \
+    && add-apt-repository -y ppa:git-core/ppa \
+    && rm -rf /var/lib/apt/lists/*
+
 # System packages (including Ruby build deps)
 RUN apt-get update -q && apt-get install -y -q --no-install-recommends \
     fish tmux jq build-essential unzip direnv curl wget ca-certificates \

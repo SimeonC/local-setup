@@ -40,12 +40,12 @@ For each selected repository:
 ```bash
 cd ~/Development/<repo>
 git fetch origin
-git worktree add ~/Development/<feature>-wts/<repo> -b <feature> origin/main
+git worktree add --relative-paths ~/Development/<feature>-wts/<repo> -b <feature> origin/main
 ```
 
 - Branch name: `<feature>` (same as the feature name)
 - Based on: `origin/main` (fetched fresh)
-- If the branch already exists, use `git worktree add ~/Development/<feature>-wts/<repo> <feature>` instead
+- If the branch already exists, use `git worktree add --relative-paths ~/Development/<feature>-wts/<repo> <feature>` instead
 
 ### 5. Generate Root CLAUDE.md
 

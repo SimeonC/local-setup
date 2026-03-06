@@ -58,6 +58,17 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
     echo $next >"$counter_file"
     set -gx CLAUDE_MONITOR_ID $next
 
+    # If workspace is a git worktree with absolute paths, convert to relative paths
+    # so --mount-git-worktree-common-dir works correctly in the container
+    if test -f "$workspace/.git"
+        set -l gitdir_line (cat "$workspace/.git")
+        set -l gitdir_path (string replace 'gitdir: ' '' -- $gitdir_line)
+        if string match -q '/*' -- $gitdir_path
+            echo "dco: converting worktree to relative paths"
+            git -C $workspace worktree repair --relative-paths
+        end
+    end
+
     echo "dco: using $config"
     devcontainer up --workspace-folder $workspace --config $config \
         --mount-git-worktree-common-dir $extra_args
