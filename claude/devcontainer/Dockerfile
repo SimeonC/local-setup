@@ -13,6 +13,7 @@ RUN apt-get update -q && apt-get install -y -q --no-install-recommends \
     fish tmux jq build-essential unzip direnv curl wget ca-certificates \
     git sudo locales gpg gpg-agent sox openssh-client \
     libffi-dev libyaml-dev libssl-dev libreadline-dev zlib1g-dev autoconf \
+    libsnappy-dev libsodium-dev \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -33,15 +34,14 @@ USER $USERNAME
 WORKDIR /home/$USERNAME
 
 # Default npm packages installed when mise provisions Node
-COPY configs/.default-npm-packages /home/$USERNAME/.default-npm-packages
+COPY fish/configs/.default-npm-packages /home/$USERNAME/.default-npm-packages
 
-# Mise — install with global tools pre-baked
-RUN curl https://mise.run | sh \
-    && mkdir -p /home/$USERNAME/.config/mise \
-    && printf '[settings]\nidiomatic_version_file_enable_tools = ["node", "ruby"]\n\n[settings.ruby]\ncompile = false\n\n[tools]\nbun = "1.2.2"\nelixir = "1.18.1-otp-27"\nerlang = "27"\nnode = "24.11.0"\npython = "3.11.13"\nruby = "3.4.4"\n' \
-       > /home/$USERNAME/.config/mise/config.toml \
-    && /home/$USERNAME/.local/bin/mise trust -a \
-    && /home/$USERNAME/.local/bin/mise install -y
+# Mise
+ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
+RUN curl https://mise.run | sh
+COPY --chown=$USERNAME:$USERNAME mise/config.toml /home/$USERNAME/.config/mise/config.toml
+RUN mise trust -a \
+    && mise install -y --jobs 1
 
 # GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \

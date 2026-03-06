@@ -1,6 +1,7 @@
 {
   "name": "${localWorkspaceFolderBasename}",
-  "build": { "dockerfile": "Dockerfile", "context": "../.." },
+  "build": { "dockerfile": "Dockerfile", "context": "../../.." },
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
   "mounts": [
     // Fish config — mount subdirs individually so fish_variables is writable (container-local)
     // but functions/completions/etc remain read-only from host
@@ -34,6 +35,8 @@
     "source=${localEnv:HOME}/.aws,target=/home/dev/.aws,type=bind,readonly",
     // GitHub CLI auth config
     "source=${localEnv:HOME}/.config/gh,target=/home/dev/.config/gh,type=bind,readonly",
+    // CleanShot screenshots — mount at host path so pasted screenshot paths resolve directly
+    "source=${localEnv:HOME}/Library/Application Support/CleanShot/media,target=${localEnv:HOME}/Library/Application Support/CleanShot/media,type=bind,readonly",
     // Isolated node_modules volume — prevents macOS binaries leaking into the Linux container
     "source=${devcontainerId}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
   ],
@@ -51,6 +54,8 @@
     "LC_ALL": "en_US.UTF-8",
     "TERM": "xterm-256color",
     "COLORTERM": "truecolor",
-    "DEVCONTAINER": "1"
+    "DEVCONTAINER": "1",
+    "GH_TOKEN": "${localEnv:GH_TOKEN}",
+    "MONGODB_HOSTS": "host.docker.internal:27017"
   }
 }

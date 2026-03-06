@@ -4,9 +4,26 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         return 1
     end
 
+    argparse 'rebuild' -- $argv
+    or return 1
+
+    set -l extra_args
+    if set -q _flag_rebuild
+        set extra_args --remove-existing-container
+    end
+
+    # Build the exec command: no args → fish, args → fish -C '<args>'
+    set -l cmd
+    if test (count $argv) -eq 0
+        set cmd fish
+    else
+        set cmd fish -C "$argv"
+    end
+
     # Walk up directory tree to find .devcontainer.local/devcontainer.json
     set -l dir $PWD
     set -l config ""
+    set -l workspace ""
     while true
         if test -f "$dir/.devcontainer.local/devcontainer.json"
             set config "$dir/.devcontainer.local/devcontainer.json"
@@ -32,23 +49,6 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         end
     end
 
-    # Parse flags and collect remaining args as the exec command
-    set -l extra_args
-    set -l cmd
-    for arg in $argv
-        switch $arg
-            case --rebuild
-                set extra_args --remove-existing-container
-            case '*'
-                set -a cmd $arg
-        end
-    end
-
-    # Default to interactive fish shell
-    if test (count $cmd) -eq 0
-        set cmd fish
-    end
-
     # Advance the shared counter so container sessions continue the host's sequence
     set -l counter_file "$HOME/.claude/monitor_counter"
     set -l next 1
@@ -59,8 +59,9 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
     set -gx CLAUDE_MONITOR_ID $next
 
     echo "dco: using $config"
-    devcontainer up --workspace-folder $workspace --config $config $extra_args
+    devcontainer up --workspace-folder $workspace --config $config \
+        --mount-git-worktree-common-dir $extra_args
     or return $status
 
-    devcontainer exec --workspace-folder $workspace --config $config $cmd
+    devcontainer exec --workspace-folder $workspace --config $config -- $cmd
 end
