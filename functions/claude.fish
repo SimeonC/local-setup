@@ -4,11 +4,17 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
     set -l next 1
     if test -f "$counter_file"
         set next (math (cat "$counter_file") + 1)
+        if test $next -gt 99
+            set next 1
+        end
     else
         # Migrate from old TMPDIR-based counter
         set -l old_counter "$TMPDIR/claude_monitor_counter"
         if test -f "$old_counter"
             set next (math (cat "$old_counter") + 1)
+            if test $next -gt 99
+                set next 1
+            end
         end
     end
     echo $next >"$counter_file"
@@ -39,6 +45,10 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
     if not set -q TMUX
         # Not in tmux — create a detached session, send claude into it, attach
         set -l sess_name "claude-$next"
+        # Propagate Ghostty env into tmux server for terminal detection in hooks
+        if set -q GHOSTTY_RESOURCES_DIR
+            tmux set-environment -g GHOSTTY_RESOURCES_DIR "$GHOSTTY_RESOURCES_DIR" 2>/dev/null
+        end
         tmux new-session -d -s $sess_name -x (tput cols) -y (tput lines)
         # Lock window name so automatic-rename doesn't override it
         tmux set-option -wt $sess_name automatic-rename off
@@ -47,7 +57,12 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux set-option -g set-titles on 2>/dev/null
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
         # Send the command into the new session (fish shell inside tmux)
-        tmux send-keys -t $sess_name "set -gx CLAUDE_MONITOR_ID $next; command claude $claude_args" Enter
+        # Forward GHOSTTY_RESOURCES_DIR so monitor.sh detects the correct terminal
+        set -l env_setup "set -gx CLAUDE_MONITOR_ID $next"
+        if set -q GHOSTTY_RESOURCES_DIR
+            set env_setup "$env_setup; set -gx GHOSTTY_RESOURCES_DIR '$GHOSTTY_RESOURCES_DIR'"
+        end
+        tmux send-keys -t $sess_name "$env_setup; command claude $claude_args" Enter
         tmux attach-session -t $sess_name
     else
         # Already in tmux — rename current window and run directly
