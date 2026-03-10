@@ -65,6 +65,8 @@ alias prw smart_prettier
 alias grit_refactor "grit apply --force refactor; and prettier --log-level=error -w ."
 alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w ."
 alias record "replayio record"
+alias dclaude danger_claude
+alias ddclaude danger_danger_claude
 
 function npm --wraps npm
     _npm_with_auth_refresh npm $argv

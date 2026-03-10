@@ -16,6 +16,15 @@ brew install mise
 brew install gum
 ```
 
+### Setup Colima (Docker)
+
+```sh
+brew install colima docker
+colima start --cpu 4 --memory 8 --disk 100 --vm-type vz --mount-type sshfs --ssh-agent --activate --save-config
+```
+
+This saves the configuration to `~/.colima/_templates/default.yaml` so future `colima start` uses the same settings.
+
 ### Install Applications
 
 - Arc
