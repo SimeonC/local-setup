@@ -11,3 +11,5 @@ json5
 mcp-remote
 @sveltejs/mcp
 css-mcp
+@playwright/cli
+
