@@ -49,15 +49,6 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         end
     end
 
-    # Advance the shared counter so container sessions continue the host's sequence
-    set -l counter_file "$HOME/.claude/monitor_counter"
-    set -l next 1
-    if test -f "$counter_file"
-        set next (math (cat "$counter_file") + 1)
-    end
-    echo $next >"$counter_file"
-    set -gx CLAUDE_MONITOR_ID $next
-
     # If workspace is a git worktree with absolute paths, convert to relative paths
     # so --mount-git-worktree-common-dir works correctly in the container
     if test -f "$workspace/.git"
@@ -69,10 +60,21 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         end
     end
 
+    # Capture Ghostty terminal UUID on the host (osascript available here) so hooks
+    # inside the container can identify which terminal tab owns this session.
+    set -l remote_env_args
+    if set -q GHOSTTY_RESOURCES_DIR
+        set -l term_uuid (osascript -e 'tell application "Ghostty" to return id of focused terminal of selected tab of front window' 2>/dev/null)
+        if test -n "$term_uuid"
+            set remote_env_args --remote-env "GHOSTTY_TERMINAL_UUID=$term_uuid"
+        end
+    end
+
     echo "dco: using $config"
     devcontainer up --workspace-folder $workspace --config $config \
         --mount-git-worktree-common-dir $extra_args
     or return $status
 
-    devcontainer exec --workspace-folder $workspace --config $config -- $cmd
+    devcontainer exec --workspace-folder $workspace --config $config \
+        $remote_env_args -- $cmd
 end
