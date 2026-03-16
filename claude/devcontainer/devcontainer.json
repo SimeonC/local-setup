@@ -40,9 +40,10 @@
     // CleanShot screenshots — mount at host path so pasted screenshot paths resolve directly
     "source=${localEnv:HOME}/Library/Application Support/CleanShot/media,target=${localEnv:HOME}/Library/Application Support/CleanShot/media,type=bind,readonly",
     // Isolated node_modules volume — prevents macOS binaries leaking into the Linux container
-    "source=${devcontainerId}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+    "source=${devcontainerId}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
   ],
-  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && cp /tmp/host-gitconfig ~/.gitconfig && sed -i 's|/Users/simeoncheeseman|/home/dev|g' ~/.gitconfig && git config --global commit.gpgsign false && git config --global safe.directory '*' && cp -r /tmp/host-ssh ~/.ssh && chmod 700 ~/.ssh && chmod 600 ~/.ssh/config 2>/dev/null; chmod 600 ~/.ssh/id_* 2>/dev/null; sudo chown -R dev:dev ${containerWorkspaceFolder}/node_modules && ~/.local/bin/mise trust && ~/.local/bin/mise install -y && fish -c authorize_npm && claude update --yes 2>/dev/null; if [ -x .devcontainer/setup.sh ]; then ~/.local/bin/mise exec -- .devcontainer/setup.sh; fi",
+  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && cp /tmp/host-gitconfig ~/.gitconfig && sed -i 's|/Users/simeoncheeseman|/home/dev|g' ~/.gitconfig && git config --global commit.gpgsign false && git config --global safe.directory '*' && cp -r /tmp/host-ssh ~/.ssh && chmod 700 ~/.ssh && chmod 600 ~/.ssh/config 2>/dev/null; chmod 600 ~/.ssh/id_* 2>/dev/null; sudo chown -R dev:dev ${containerWorkspaceFolder}/node_modules && ~/.local/bin/mise trust && ~/.local/bin/mise install -y && fish -c authorize_npm && claude update; if [ -x .devcontainer/setup.sh ]; then ~/.local/bin/mise exec -- .devcontainer/setup.sh; fi",
+  "postStartCommand": "bash /home/dev/.config/fish/claude/devcontainer/forward-ports.sh \"$PWD\"",
   "remoteUser": "dev",
   "remoteEnv": {
     "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock",
@@ -58,6 +59,6 @@
     "COLORTERM": "truecolor",
     "DEVCONTAINER": "1",
     "GH_TOKEN": "${localEnv:GH_TOKEN}",
-    "MONGODB_HOSTS": "host.docker.internal:27017"
-  }
+    "MONGODB_HOSTS": "host.docker.internal:27017",
+  },
 }

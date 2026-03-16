@@ -15,7 +15,7 @@ RUN apt-get update -q && apt-get install -y -q --no-install-recommends software-
 
 # System packages (including Ruby build deps)
 RUN apt-get update -q && apt-get install -y -q --no-install-recommends \
-    fish tmux jq build-essential unzip direnv curl wget ca-certificates \
+    fish tmux jq build-essential unzip direnv curl wget ca-certificates socat \
     git sudo locales gpg gpg-agent sox openssh-client \
     libffi-dev libyaml-dev libssl-dev libreadline-dev zlib1g-dev autoconf \
     libsnappy-dev libsodium-dev \
