@@ -61,6 +61,5 @@
     "COLORTERM": "truecolor",
     "DEVCONTAINER": "1",
     "GH_TOKEN": "${localEnv:GH_TOKEN}",
-    "MONGODB_HOSTS": "host.docker.internal:27017",
   },
 }
