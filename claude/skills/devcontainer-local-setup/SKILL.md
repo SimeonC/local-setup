@@ -37,8 +37,24 @@ If using `/worktree-setup`, port blocks start at 4000 in increments of 100 (10 p
 
 ## Gitignore reminder
 
-Ensure both are gitignored:
+These files should be gitignored to prevent committing local overrides. You can either:
+
+**Option 1: Local .gitignore (committed)**
 ```
 .devcontainer/ports.local
 .env.local
 ```
+
+**Option 2: Global gitignore (recommended)**
+Instead of editing the local `.gitignore`, use Git's global gitignore to avoid unnecessary local changes:
+
+```fish
+# Set global exclude file (one-time setup)
+git config --global core.excludesfile ~/.gitignore_global
+
+# Then add patterns to ~/.gitignore_global
+echo ".env.local" >> ~/.gitignore_global
+echo ".devcontainer/ports.local" >> ~/.gitignore_global
+```
+
+This keeps your local repo clean while ensuring these files are always ignored across all projects.
