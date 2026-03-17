@@ -7,7 +7,7 @@ description: Use when working on devcontainer port forwarding, .env.local files,
 
 ## Port config
 
-Create `.devcontainer/ports` (committed) and `.devcontainer/ports.local` (gitignored) — one port per line, `#` comments supported:
+Create `.devcontainer/ports.local` (gitignored, preferred) for machine-specific port config — one port per line, `#` comments supported:
 
 ```
 # App server
@@ -15,6 +15,8 @@ Create `.devcontainer/ports` (committed) and `.devcontainer/ports.local` (gitign
 # HMR
 3001
 ```
+
+Alternatively, `.devcontainer/ports` (committed) can be used for shared/team-wide port config.
 
 `forward-ports.sh` also auto-detects ports from:
 - `vite.config.*` — `server.port`
