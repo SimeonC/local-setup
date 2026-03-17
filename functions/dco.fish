@@ -60,6 +60,12 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         end
     end
 
+    # Run env setup (non-blocking) before container starts
+    if test -f "$workspace/local_env.fish"
+        echo "dco: running local_env.fish"
+        source "$workspace/local_env.fish"
+    end
+
     # Capture Ghostty terminal UUID on the host (osascript available here) so hooks
     # inside the container can identify which terminal tab owns this session.
     set -l remote_env_args

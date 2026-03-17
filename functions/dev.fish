@@ -1,4 +1,7 @@
 function dev
+  if test -f ./local_env.fish
+    source ./local_env.fish
+  end
   if test -f ./local_dev.fish
     source ./local_dev.fish
   else if test -f ./package.json

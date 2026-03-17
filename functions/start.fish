@@ -1,4 +1,7 @@
 function start
+  if test -f ./local_env.fish
+    source ./local_env.fish
+  end
   if test -f ./local_start.fish
     source ./local_start.fish
   else if test -f ./package.json
