@@ -17,8 +17,8 @@ chmod 700 ~/.ssh
 chmod 600 ~/.ssh/config 2>/dev/null || true
 chmod 600 ~/.ssh/id_* 2>/dev/null || true
 
-# Fix node_modules volume ownership
-sudo chown -R dev:dev "${containerWorkspaceFolder}/node_modules" 2>/dev/null || true
+# Fix node_modules volume ownership (CONTAINER_WORKSPACE_FOLDER set by devcontainer CLI)
+sudo chown -R dev:dev "${CONTAINER_WORKSPACE_FOLDER:-$PWD}/node_modules" 2>/dev/null || true
 
 # Install tool versions (Node, Ruby, Elixir, etc)
 ~/.local/bin/mise trust
