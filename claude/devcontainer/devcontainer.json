@@ -44,7 +44,7 @@
     // Isolated Ruby gems volume — prevents macOS binaries leaking into the Linux container
     "source=${devcontainerId}-gems,target=/home/dev/.local/share/gem,type=volume",
   ],
-  "postCreateCommand": "cp /tmp/host-fish-variables ~/.config/fish/fish_variables && cp /tmp/host-gitconfig ~/.gitconfig && sed -i 's|/Users/simeoncheeseman|/home/dev|g' ~/.gitconfig && git config --global commit.gpgsign false && git config --global safe.directory '*' && cp -r /tmp/host-ssh ~/.ssh && chmod 700 ~/.ssh && chmod 600 ~/.ssh/config 2>/dev/null; chmod 600 ~/.ssh/id_* 2>/dev/null; sudo chown -R dev:dev ${containerWorkspaceFolder}/node_modules && ~/.local/bin/mise trust && ~/.local/bin/mise install -y && fish -c authorize_npm && ([ -f package.json ] && npm ci) || true && ([ -f Gemfile ] && bundle install) || true && ([ -f mix.exs ] && mix deps.get) || true && ([ -x .devcontainer/setup.sh ] && .devcontainer/setup.sh) || true && claude update",
+  "postCreateCommand": "bash /home/dev/.config/fish/claude/devcontainer/setup-container.sh",
   "postStartCommand": "bash /home/dev/.config/fish/claude/devcontainer/forward-ports.sh \"$PWD\"",
   "remoteUser": "dev",
   "remoteEnv": {
