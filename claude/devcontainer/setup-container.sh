@@ -2,39 +2,40 @@
 # Initialize devcontainer environment: copy config, install tool managers, install language deps
 set -euo pipefail
 
-# Copy host config files into container
+echo "==> Copying host config files"
 cp /tmp/host-fish-variables ~/.config/fish/fish_variables
 cp /tmp/host-gitconfig ~/.gitconfig
 sed -i 's|/Users/simeoncheeseman|/home/dev|g' ~/.gitconfig
 
-# Configure git
+echo "==> Configuring git"
 git config --global commit.gpgsign false
 git config --global safe.directory '*'
 
-# Set up SSH with correct permissions
+echo "==> Setting up SSH"
 cp -r /tmp/host-ssh ~/.ssh
 chmod 700 ~/.ssh
 chmod 600 ~/.ssh/config 2>/dev/null || true
 chmod 600 ~/.ssh/id_* 2>/dev/null || true
 
-# Fix node_modules volume ownership (CONTAINER_WORKSPACE_FOLDER set by devcontainer CLI)
+echo "==> Fixing node_modules volume ownership"
 sudo chown -R dev:dev "${CONTAINER_WORKSPACE_FOLDER:-$PWD}/node_modules" 2>/dev/null || true
 
-# Install tool versions (Node, Ruby, Elixir, etc)
+echo "==> Installing tool versions via mise"
 ~/.local/bin/mise trust
 ~/.local/bin/mise install -y
 fish -c authorize_npm
 
-# Install language-specific dependencies
-[ -f package.json ] && { echo "setup-container: installing Node deps"; npm ci; } || true
-[ -f Gemfile ] && { echo "setup-container: installing Ruby deps"; bundle install; } || true
-[ -f mix.exs ] && { echo "setup-container: installing Elixir deps"; mix deps.get; } || true
+echo "==> Installing language dependencies"
+[ -f package.json ] && { echo "    Node: npm ci"; npm ci; } || true
+[ -f Gemfile ] && { echo "    Ruby: bundle install"; bundle install; } || true
+[ -f mix.exs ] && { echo "    Elixir: mix deps.get"; mix deps.get; } || true
 
-# Run project-specific setup (e.g., Playwright binaries)
 if [ -x .devcontainer/setup.sh ]; then
-    echo "setup-container: running project setup.sh"
+    echo "==> Running project setup.sh"
     .devcontainer/setup.sh
 fi
 
-# Final updates
+echo "==> Updating Claude Code"
 claude update
+
+echo "==> Setup complete"
