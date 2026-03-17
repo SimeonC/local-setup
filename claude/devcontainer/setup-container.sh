@@ -26,13 +26,13 @@ echo "==> Installing tool versions via mise"
 fish -c authorize_npm
 
 echo "==> Installing language dependencies"
-[ -f package.json ] && { echo "    Node: npm ci"; npm ci; } || true
-[ -f Gemfile ] && { echo "    Ruby: bundle install"; bundle install; } || true
-[ -f mix.exs ] && { echo "    Elixir: mix deps.get"; mix deps.get; } || true
+[ -f package.json ] && { echo "    Node: npm ci"; ~/.local/bin/mise exec -- npm ci; } || true
+[ -f Gemfile ] && { echo "    Ruby: bundle install"; ~/.local/bin/mise exec -- bundle install; } || true
+[ -f mix.exs ] && { echo "    Elixir: mix deps.get"; ~/.local/bin/mise exec -- mix deps.get; } || true
 
 if [ -x .devcontainer/setup.sh ]; then
     echo "==> Running project setup.sh"
-    .devcontainer/setup.sh
+    ~/.local/bin/mise exec -- .devcontainer/setup.sh
 fi
 
 echo "==> Updating Claude Code"
