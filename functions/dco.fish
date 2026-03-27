@@ -40,6 +40,7 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         end
     end
 
+    set -l using_global_config 0
     if test -z "$config"
         set -l global_config "$HOME/.config/fish/claude/devcontainer/devcontainer.json"
         if test -f "$global_config"
@@ -48,9 +49,36 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
             end
             set config $global_config
             set workspace $PWD
+            set using_global_config 1
         else
             echo "dco: no devcontainer config found" >&2
             return 1
+        end
+    end
+
+    # Auto-rebuild if global devcontainer config has changed since last build
+    set -l hash_state_file ""
+    if test $using_global_config -eq 1
+        set -l dco_dir "$HOME/.config/fish/claude/devcontainer"
+        set -l config_hash (find "$dco_dir" -maxdepth 1 -type f | sort | xargs cat 2>/dev/null | md5)
+        set -l workspace_key (echo $workspace | md5)
+        set -l hashes_dir "$dco_dir/.rebuild-hashes"
+        mkdir -p $hashes_dir
+        set hash_state_file "$hashes_dir/$workspace_key"
+        if not set -q _flag_rebuild
+            set -l stored_hash ""
+            if test -f "$hash_state_file"
+                set stored_hash (cat "$hash_state_file")
+            end
+            if test "$config_hash" != "$stored_hash"
+                set_color --bold yellow
+                echo "╔══════════════════════════════════════════╗"
+                echo "║  🔄  devcontainer config changed         ║"
+                echo "║      rebuilding automatically...         ║"
+                echo "╚══════════════════════════════════════════╝"
+                set_color normal
+                set extra_args --remove-existing-container
+            end
         end
     end
 
@@ -82,12 +110,18 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         end <"$workspace/.devcontainer/.env.local"
     end
 
-    # Capture Ghostty terminal UUID on the host (osascript available here) so hooks
-    # inside the container can identify which terminal tab owns this session.
-    if set -q GHOSTTY_RESOURCES_DIR
+    # Forward terminal surface ID into the container so hooks can identify
+    # which terminal tab owns this session.
+    if set -q CMUX_SURFACE_ID
+        set -a remote_env_args --remote-env "CMUX_SURFACE_ID=$CMUX_SURFACE_ID"
+        if set -q CMUX_WORKSPACE_ID
+            set -a remote_env_args --remote-env "CMUX_WORKSPACE_ID=$CMUX_WORKSPACE_ID"
+        end
+    else if set -q GHOSTTY_RESOURCES_DIR
         set -l term_uuid (osascript -e 'tell application "Ghostty" to return id of focused terminal of selected tab of front window' 2>/dev/null)
         if test -n "$term_uuid"
             set -a remote_env_args --remote-env "GHOSTTY_TERMINAL_UUID=$term_uuid"
+            set -a remote_env_args --remote-env "GHOSTTY_RESOURCES_DIR=$GHOSTTY_RESOURCES_DIR"
         end
     end
 
@@ -95,6 +129,12 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
     devcontainer up --workspace-folder $workspace --config $config \
         --mount-git-worktree-common-dir $extra_args
     or return $status
+
+    # Update rebuild hash after successful up (global config only)
+    if test -n "$hash_state_file"
+        set -l dco_dir "$HOME/.config/fish/claude/devcontainer"
+        find "$dco_dir" -maxdepth 1 -type f | sort | xargs cat 2>/dev/null | md5 > $hash_state_file
+    end
 
     devcontainer exec --workspace-folder $workspace --config $config \
         $remote_env_args -- $cmd

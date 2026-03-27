@@ -60,7 +60,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 RUN curl -fsSL https://docs.grit.io/install | bash
 
 # Lokalise CLI
-RUN curl -sfL https://raw.githubusercontent.com/lokalise/lokalise-cli-2-go/master/install.sh | sh
+RUN curl -sfL https://raw.githubusercontent.com/lokalise/lokalise-cli-2-go/master/install.sh | sh -s -- -b ~/.local/bin
 
 # Claude Code
 RUN curl -fsSL https://claude.ai/install.sh | bash
