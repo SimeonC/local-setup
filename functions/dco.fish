@@ -84,12 +84,53 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
 
     # If workspace is a git worktree with absolute paths, convert to relative paths
     # so --mount-git-worktree-common-dir works correctly in the container
+    set -l override_config_file ""
     if test -f "$workspace/.git"
         set -l gitdir_line (cat "$workspace/.git")
         set -l gitdir_path (string replace 'gitdir: ' '' -- $gitdir_line)
         if string match -q '/*' -- $gitdir_path
             echo "dco: converting worktree to relative paths"
             git -C $workspace worktree repair --relative-paths
+            # Re-read after repair
+            set gitdir_path (string replace 'gitdir: ' '' -- (cat "$workspace/.git"))
+        end
+
+        # When --mount-git-worktree-common-dir is used, the CLI mounts the common
+        # ancestor of the workspace and gitdir at /workspaces/. The workspaceFolder
+        # must match the nested path, not the flat basename.
+        set -l levels_up 0
+        set -l remaining $gitdir_path
+        while string match -q '../*' -- $remaining
+            set levels_up (math $levels_up + 1)
+            set remaining (string replace -r '^\.\.\/' '' -- $remaining)
+        end
+
+        if test $levels_up -gt 1
+            # CLI mounts N levels above workspace at /workspaces/
+            set -l mount_root (realpath $workspace)
+            for i in (seq $levels_up)
+                set mount_root (dirname $mount_root)
+            end
+            set -l rel_path (string replace "$mount_root/" '' -- (realpath $workspace))
+            # Generate modified config in a temp dir named devcontainer.json (CLI requires this name).
+            # Patch workspaceFolder and make Dockerfile/context paths absolute so they
+            # resolve correctly from the temp dir.
+            set -l config_dir (realpath (dirname $config))
+            set -l abs_context (realpath "$config_dir/../../..")
+            set -l override_dir (mktemp -d /tmp/dco-override-XXXXXX)
+            set override_config_file "$override_dir/devcontainer.json"
+            sed \
+                -e 's|"dockerfile": "Dockerfile"|"dockerfile": "'"$config_dir/Dockerfile"'"|' \
+                -e 's|"context": "\.\./\.\./\.\."|"context": "'"$abs_context"'"|' \
+                -e 's|/workspaces/\${localWorkspaceFolderBasename}|/workspaces/'"$rel_path"'|g' \
+                $config > $override_config_file
+
+            # The worktree parent dir contains all sibling repos — bind-mount it so
+            # they are all visible at /workspaces/<parent>/ inside the container.
+            set -l worktree_parent (dirname (realpath $workspace))
+            set -l parent_name (basename $worktree_parent)
+            set -a extra_args --mount "type=bind,source=$worktree_parent,target=/workspaces/$parent_name"
+            echo "dco: nested worktree detected, workspaceFolder=/workspaces/$rel_path (siblings at /workspaces/$parent_name/)"
         end
     end
 
@@ -125,10 +166,19 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         end
     end
 
-    echo "dco: using $config"
-    devcontainer up --workspace-folder $workspace --config $config \
+    # Use override config if generated for nested worktrees
+    set -l effective_config $config
+    if test -n "$override_config_file"
+        set effective_config $override_config_file
+    end
+
+    echo "dco: using $effective_config"
+    devcontainer up --workspace-folder $workspace --config $effective_config \
         --mount-git-worktree-common-dir $extra_args
-    or return $status
+    or begin
+        test -n "$override_config_file" && rm -rf (dirname $override_config_file)
+        return $status
+    end
 
     # Update rebuild hash after successful up (global config only)
     if test -n "$hash_state_file"
@@ -136,6 +186,9 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
         find "$dco_dir" -maxdepth 1 -type f | sort | xargs cat 2>/dev/null | md5 > $hash_state_file
     end
 
-    devcontainer exec --workspace-folder $workspace --config $config \
+    devcontainer exec --workspace-folder $workspace --config $effective_config \
         $remote_env_args -- $cmd
+
+    # Clean up temp override dir (not the original config)
+    test -n "$override_config_file" && rm -rf (dirname $override_config_file)
 end
