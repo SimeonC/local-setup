@@ -22,6 +22,14 @@ RUN apt-get update -q && apt-get install -y -q --no-install-recommends \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
+# Playwright browser dependencies
+RUN apt-get update -q
+RUN apt-get install -y -q --no-install-recommends \
+    libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
+    libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
+    libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 libcairo2 libatspi2.0-0t64
+RUN rm -rf /var/lib/apt/lists/*
+
 # Rename the existing ubuntu user (uid 1000) to dev, set fish as shell, grant sudo
 RUN usermod -l $USERNAME -d /home/$USERNAME -m -s /usr/bin/fish ubuntu \
     && groupmod -n $USERNAME ubuntu \
