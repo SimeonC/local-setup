@@ -1,5 +1,6 @@
 {
   "name": "${localWorkspaceFolderBasename}",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "build": { "dockerfile": "Dockerfile", "context": "../../.." },
   "runArgs": ["--add-host=host.docker.internal:host-gateway"],
   "mounts": [
