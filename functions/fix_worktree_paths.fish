@@ -1,4 +1,4 @@
-function fix_worktree_paths --description 'Convert all git worktrees to relative paths'
+function fix_worktree_paths --description 'Convert all git worktrees to absolute paths'
     set -l base_dir $argv[1]
     test -z "$base_dir" && set base_dir ~/Development
 
@@ -9,6 +9,6 @@ function fix_worktree_paths --description 'Convert all git worktrees to relative
         set -l wt_dir "$git_dir/worktrees"
         test -d "$wt_dir" || continue # skip repos without worktrees
         echo "Fixing: $repo"
-        git -C $repo worktree repair --relative-paths
+        git -C $repo worktree repair
     end
 end
