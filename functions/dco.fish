@@ -89,12 +89,6 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
     if test -f "$workspace/.git"
         set -l gitdir_line (cat "$workspace/.git")
         set -l gitdir_path (string replace 'gitdir: ' '' -- $gitdir_line)
-        # Ensure .git file has absolute gitdir path (required for git inside container)
-        if not string match -q '/*' -- $gitdir_path
-            echo "dco: converting worktree to absolute paths"
-            git -C $workspace worktree repair
-            set gitdir_path (string replace 'gitdir: ' '' -- (cat "$workspace/.git"))
-        end
         # Resolve the common (main repo) .git dir
         set -l commondir_rel (cat "$gitdir_path/commondir")
         set -l common_git_dir (realpath "$gitdir_path/$commondir_rel")
