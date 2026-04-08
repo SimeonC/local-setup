@@ -111,6 +111,8 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
             # Volume-overlay node_modules for each sibling to prevent macOS binaries leaking
             for sibling in $workspace_parent/*/
                 set -l sib_name (basename $sibling)
+                test "$sib_name" = "$repo_basename"; and continue  # skip self (covered by devcontainer.json volume)
+                test -e "$sibling/.git"; or continue               # skip non-repos (bare node_modules, etc.)
                 set -a extra_args --mount "type=volume,source=dco-$parent_name-$sib_name-node-modules,target=/workspaces/$parent_name/$sib_name/node_modules"
             end
             # Generate override config with correct workspaceFolder for nested path
