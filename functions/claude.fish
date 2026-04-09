@@ -23,7 +23,7 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux rename-window -t $sess_name "$short_cwd"
         tmux set-option -g set-titles on 2>/dev/null
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
-        tmux send-keys -t $sess_name "command claude $claude_args" Enter
+        tmux send-keys -t $sess_name "command claude "(string join " " -- (string escape -- $claude_args)) Enter
         tmux attach-session -t $sess_name
     else
         # Already in tmux — rename current window and run directly

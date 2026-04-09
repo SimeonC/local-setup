@@ -8,5 +8,5 @@ function danger_claude --description 'Start a devcontainer and run Claude Code w
     end
 
     set -l claude_args --dangerously-skip-permissions $argv
-    dco $dco_args "claude $claude_args"
+    dco $dco_args "claude "(string join " " -- (string escape -- $claude_args))
 end

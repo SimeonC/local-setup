@@ -18,13 +18,12 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 ## Agent Delegation & Token Budget
 - **Always start a team** at the beginning of every conversation using `TeamCreate`. You are the Team Lead running on Opus — reserve yourself for orchestration, planning, architectural decisions, and synthesis only.
 - **Max 3–4 concurrent teammates.** Queue remaining tasks and launch them as slots free up rather than spawning all at once.
-- Spawn teammates (not ad-hoc subagents) for ALL work using `Agent` with `team_name`:
-  - Code search, file exploration, grep/glob operations → `model: "haiku"`
-  - Code editing, writing, refactoring → `model: "sonnet"`
-  - Test running and output analysis → `model: "haiku"` or `model: "sonnet"`
-  - Research, documentation lookup, web searches → `model: "haiku"`
-  - Running tools, scripts or dev servers and processing output → `model: "haiku"`
-- Use sonnet when the task needs reasoning (e.g. writing non-trivial code, analyzing complex test failures). Use haiku for mechanical tasks (search, read, simple edits).
+- Spawn teammates (not ad-hoc subagents) for ALL work using `Agent` with `team_name`.
+- The `model` param accepts tier names (e.g. `"haiku"`, `"default"`, `"best"`). Pick the cheapest tier that fits the task's reasoning demands:
+  - **Cheapest/fastest** (`"haiku"`): code search, grep/glob, reading files, running scripts, simple edits, committing, research/doc lookup.
+  - **Mid-tier** (`"default"`): code editing, refactoring, non-trivial test analysis, writing new code.
+  - **Reasoning-heavy** (`"best"`): complex architectural decisions, multi-file refactors with tricky logic. Rarely needed for teammates.
+- Rule of thumb: if the task is mechanical or has a clear spec, use `"haiku"`. If it requires judgement or creativity, step up.
 - Never do extensive searching or file reading directly as Team Lead — assign it to a teammate.
 - Create tasks with `TaskCreate` and assign them to teammates. Track all work through the shared task list.
 
