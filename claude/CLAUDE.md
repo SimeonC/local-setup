@@ -47,6 +47,11 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
     3. Call `TeamDelete` to clean up team and task directories
  - This is a safety net, not the primary cleanup mechanism — most teammates should already be dismissed by this point.
 
+## Code Quality
+
+- **Always adhere to SOLID principles** (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion) when writing or modifying code.
+- **Always use `/tdd` skill** whenever a task involves code changes — run it before writing implementation code.
+
 ## Commits
 
 - Follow the repo's existing commit convention (check recent `git log` output).
