@@ -31,62 +31,11 @@ See [gritql](../gritql/SKILL.md) for the complete GritQL syntax, built-in functi
 
 ## Pattern File Format
 
-Patterns live in `.grit/patterns/<pattern_name>.md`. The filename (minus `.md`) becomes the pattern name.
-
-```markdown
----
-level: info
-tags: [refactor]
----
-# Pattern Title
-
-Brief description of what this pattern does.
-
-\`\`\`grit
-// GritQL body goes here
-`old_code($var)` => `new_code($var)`
-\`\`\`
-
-## Test: description of positive case
-
-\`\`\`typescript
-// Input code
-old_code("hello");
-\`\`\`
-
-\`\`\`typescript
-// Expected output
-new_code("hello");
-\`\`\`
-
-## Test: negative case (should not match)
-
-\`\`\`typescript
-// This code should be unchanged — single block with no expected output = negative test
-unrelated_code("hello");
-\`\`\`
-```
-
-### Test case rules
-- **Single code block** = negative test (pattern should NOT match this code)
-- **Two code blocks** = first is input, second is expected output (positive test)
-- Run tests: `grit patterns test --filter=<pattern_name>`
+See [../gritql/references/pattern-file-format.md](../gritql/references/pattern-file-format.md) for the `.grit/patterns/<name>.md` format and test-case rules.
 
 ## CLI Quick Reference
 
-| Command | Purpose |
-|---------|---------|
-| `grit apply <pattern> --dry-run` | Preview changes without applying |
-| `grit apply <pattern>` | Apply the pattern |
-| `grit apply <pattern> --force` | Apply even with uncommitted changes |
-| `grit apply <pattern> --language <lang>` | Specify target language |
-| `grit apply <pattern> -m <N>` | Limit to N matches |
-| `grit patterns test --filter=<name>` | Run tests for a pattern |
-| `grit patterns test --update` | Update expected test outputs |
-| `grit check` | Check for pattern violations |
-| `grit check --fix` | Auto-fix violations |
-| `grit list` | List available patterns |
-| `grit init` | Install grit modules |
+See [../gritql/references/cli-reference.md](../gritql/references/cli-reference.md) for the grit CLI commands.
 
 ## Important Notes
 

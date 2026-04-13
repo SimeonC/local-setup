@@ -40,76 +40,20 @@ grit apply '<pattern>' --dry-run --language typescript
 grit apply '<pattern>' --dry-run -- src/
 ```
 
-## Recipes
+## Quick Examples
 
-### Find function/method calls
 ```bash
 # All calls to a specific function
 grit apply '`fetchData($...)`' --dry-run
 
-# Method calls on a specific object
-grit apply '`logger.$method($...)`' --dry-run
-
-# Chained calls
-grit apply '`$_.then($...).catch($...)`' --dry-run
-```
-
-### Find imports
-```bash
-# Imports from a specific package
-grit apply '`import $_ from "lodash"`' --dry-run
-
-# Named imports
+# Named imports from a package
 grit apply '`import { $_ } from "react"`' --dry-run
-
-# Require calls
-grit apply '`require("express")`' --dry-run
-```
-
-### Find definitions
-```bash
-# Function definitions
-grit apply '`function $name($...) { $_ }`' --dry-run
-
-# Arrow functions assigned to const
-grit apply '`const $name = ($...) => $_`' --dry-run
 
 # Class definitions
 grit apply '`class $name { $_ }`' --dry-run
-
-# Type/interface definitions
-grit apply '`interface $name { $_ }`' --dry-run
 ```
 
-### Find usages in context
-```bash
-# Find usage inside async functions
-grit apply '`await $fn($...)`' --dry-run
-
-# Find usage inside try/catch
-grit apply '`try { $body } catch($_) { $_ }` where { $body <: contains `$target($...)` }' --dry-run
-
-# Find usage inside specific function
-grit apply '`function handleSubmit($...) { $body }` where { $body <: contains `validate($...)` }' --dry-run
-```
-
-### Find patterns with conditions
-```bash
-# Find variables matching a regex
-grit apply '`const $name = $_` where { $name <: r"^use[A-Z]" }' --dry-run
-
-# Find calls with specific argument count
-grit apply '`$fn($a, $b, $c, $...rest)` where { $fn <: `createServer` }' --dry-run
-```
-
-### Find by file
-```bash
-# Search only test files
-grit apply '`describe($_, $...)`' --dry-run -- '**/*.test.*'
-
-# Search only in src/
-grit apply '`console.log($...)`' --dry-run -- src/
-```
+See [../gritql/references/recipes.md](../gritql/references/recipes.md) for more patterns grouped by intent.
 
 ## Tips
 

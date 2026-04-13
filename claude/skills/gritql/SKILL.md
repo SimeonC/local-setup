@@ -218,19 +218,7 @@ $body <: some bubble($imports) `import $name from $_` where {
 
 ## Built-in Functions
 
-| Function | Purpose | Example |
-|----------|---------|---------|
-| `capitalize($str)` | Uppercase first char | `capitalize("foo")` → `"Foo"` |
-| `uppercase($str)` | All uppercase | `uppercase("foo")` → `"FOO"` |
-| `lowercase($str)` | All lowercase | `lowercase("FOO")` → `"foo"` |
-| `trim($str)` | Strip whitespace | `trim("  foo  ")` → `"foo"` |
-| `join(list, separator)` | Join list to string | `join(list=$items, separator=", ")` |
-| `split($str, separator)` | Split string to list | `split($str, separator=",")` |
-| `length($list)` | Count elements | `length($items)` |
-| `distinct($list)` | Remove duplicates | `distinct($items)` |
-| `text($node)` | Get node text as string | `text($expr)` |
-| `log($msg)` | Debug logging | `log($var)` |
-| `resolve($path)` | Resolve relative path | `resolve("./foo")` |
+See [references/functions.md](references/functions.md) for the full built-in functions table.
 
 ## Custom Functions
 
@@ -316,8 +304,4 @@ console.log("this line won't match");
 
 ## Common Pitfalls
 
-1. **Invalid syntax in backticks** — Code inside backticks must parse as valid target-language code. If you need to match a fragment that isn't valid syntax, use AST node patterns instead.
-2. **Forgetting bubble** — Always use `bubble` when using `contains` with a rewrite (`=>`). Without it, metavariables from inner and outer scope collide.
-3. **Bubble scoping** — Variables inside `bubble` are isolated by default. Use `bubble($var)` to explicitly share variables with the outer scope.
-4. **Sequential without contains** — Steps inside `sequential` are not auto-wrapped in `contains`. You must write `contains` explicitly.
-5. **Spread in wrong position** — `$...` only works in positions where multiple nodes are valid (argument lists, array elements, object fields, statement lists).
+See [references/pitfalls.md](references/pitfalls.md) for common pitfalls.

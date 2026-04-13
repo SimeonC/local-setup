@@ -23,3 +23,4 @@ You are breaking down a large plan into smaller, focused sub-plans for sequentia
    - Retain overall Context but delegate execution details
 5. Output summary of created sub-plans and the updated parent structure
 6. Open all created/modified plan files in the user's default editor using `open <file>` so they can review the results directly
+7. Suggest the user run `/refine-plan` on each sub-plan for a final readiness check before autoplan execution
