@@ -132,7 +132,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo ""
             echo "🧪 Running tests..."
 
-            if eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
+            if CI=true eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
                 echo "✅ Tests pass."
                 break
             else
@@ -231,7 +231,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     echo ""
                     echo "🧪 Re-running tests after verify fix..."
 
-                    if eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
+                    if CI=true eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
                         echo "✅ Tests pass."
                         break
                     else
