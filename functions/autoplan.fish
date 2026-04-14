@@ -273,6 +273,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         set -l commit_prompt (__autoplan_interpolate_prompt \
             (cat "$HOME/.claude/skills/prepare-autoplan/references/commit-prompt.md") \
             $current_plan $branch $test_cmd)
+        set commit_prompt (string replace -a -- '$PROMPTS_FILE' "$prompts_path" $commit_prompt)
         command claude $perm_flag --model haiku --effort medium "$commit_prompt"
 
         # Follow linked list
