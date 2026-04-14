@@ -51,6 +51,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "Branch $branch already exists. Use --resume to continue." >&2
             return 1
         end
+        if not git diff --quiet HEAD
+            echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
+            return 1
+        end
         git fetch origin main
         git checkout --no-track -b $branch origin/main
     end
@@ -86,7 +90,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         set -l gate_output (command claude -p $perm_flag --model haiku --effort low \
             "Read plan at $current_plan. Evaluate: sufficient detail, clear scope, testable outcomes. If any part is too vague, output what's missing. If all automatable, output only \"READY\".")
 
-        if not string match -q "*READY*" $gate_output
+        if not string match -q -- "*READY*" $gate_output
             echo "❌ Gate rejected. Feedback:" >&2
             echo "$gate_output" >&2
             return 1
