@@ -1,9 +1,8 @@
-function autoplan --description "Iterative TDD loop driven by a markdown plan file"
-    argparse 'max-iterations=' -- $argv
+function autoplan --description "Iterative TDD loop driven by a linked list of markdown plan files"
+    argparse 'max-fix-attempts=' 'max-verify-passes=' 'no-pr' 'resume' -- $argv
 
-    # Validate arguments
     if test (count $argv) -eq 0
-        echo "Usage: autoplan <plan-file> [--max-iterations N]" >&2
+        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--no-pr] [--resume]" >&2
         return 1
     end
 
@@ -13,8 +12,8 @@ function autoplan --description "Iterative TDD loop driven by a markdown plan fi
         return 1
     end
 
-    set -l max_iterations (set -q _flag_max_iterations; and echo $_flag_max_iterations; or echo 6)
-    set -l iteration 0
+    set -l max_fix_attempts (set -q _flag_max_fix_attempts; and echo $_flag_max_fix_attempts; or echo 3)
+    set -l max_verify_passes (set -q _flag_max_verify_passes; and echo $_flag_max_verify_passes; or echo 3)
 
     # Permission flag for devcontainer
     set -l perm_flag
@@ -22,97 +21,305 @@ function autoplan --description "Iterative TDD loop driven by a markdown plan fi
         set perm_flag --dangerously-skip-permissions
     end
 
-    # System prompts for each phase
-    set -l gate_system "You are evaluating a plan for automated implementation. Be strict."
+    # ===== SETUP =====
+    set -l branch (__autoplan_frontmatter $plan_file branch)
+    set -l test_cmd (__autoplan_frontmatter $plan_file test_cmd)
+    set -l pr_title (__autoplan_frontmatter $plan_file pr_title)
+    set -l prompts_path (__autoplan_frontmatter $plan_file prompts)
 
-    set -l impl_system "Do NOT refactor beyond making tests pass. Do NOT modify the plan file. Do NOT commit."
-
-    set -l harden_system "Do NOT modify the plan file. Do NOT commit."
-
-    set -l verify_system "You must run tests before committing. You must mark exactly one phase done per invocation."
-
-    # ===== PHASE 0: GATE =====
-    echo "🔍 Phase 0: Evaluating plan readiness..."
-
-    set -l gate_output (command claude -p $perm_flag --model haiku --effort low \
-        --append-system-prompt "$gate_system" \
-        "Read plan at $plan_file. Evaluate each phase for: sufficient detail, clear scope, testable outcomes. If any phase too vague, output what's missing. If all automatable, output only \"READY\".")
-
-    if not string match -q "*READY*" $gate_output
-        echo "❌ Gate phase rejected. Feedback:" >&2
-        echo "$gate_output" >&2
+    if test -z "$branch"
+        echo "Error: Plan file missing required frontmatter key: branch" >&2
+        return 1
+    end
+    if test -z "$test_cmd"
+        echo "Error: Plan file missing required frontmatter key: test_cmd" >&2
+        return 1
+    end
+    if test -z "$pr_title"
+        echo "Error: Plan file missing required frontmatter key: pr_title" >&2
         return 1
     end
 
-    echo "✅ Gate phase passed. Starting iteration loop."
+    # Resolve prompts path relative to plan file directory
+    if test -n "$prompts_path" -a ! -f "$prompts_path"
+        set -l plan_dir (dirname $plan_file)
+        set prompts_path "$plan_dir/$prompts_path"
+    end
 
-    # ===== MAIN LOOP =====
-    while test -f $plan_file
-        set iteration (math $iteration + 1)
-
-        if test $iteration -gt $max_iterations
-            echo "⚠️  Reached max iterations ($max_iterations). Breaking loop." >&2
+    if not set -q _flag_resume
+        if git show-ref --verify --quiet refs/heads/$branch
+            echo "Branch $branch already exists. Use --resume to continue." >&2
             return 1
+        end
+        git fetch origin main
+        git checkout --no-track -b $branch origin/main
+    end
+
+    mkdir -p ./tmp
+
+    # ===== MAIN LOOP (linked list traversal) =====
+    set -l current_plan $plan_file
+
+    while true
+        # Re-load per-plan overrides (test_cmd, prompts can be overridden)
+        set -l plan_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
+        if test -n "$plan_test_cmd"
+            set test_cmd $plan_test_cmd
+        end
+        set -l plan_prompts (__autoplan_frontmatter $current_plan prompts)
+        if test -n "$plan_prompts"
+            set prompts_path $plan_prompts
+            if test ! -f "$prompts_path"
+                set -l plan_dir (dirname $current_plan)
+                set prompts_path "$plan_dir/$prompts_path"
+            end
         end
 
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Iteration $iteration / $max_iterations"
+        echo "Plan: $current_plan"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+        # ===== GATE =====
+        echo "🔍 Gate: Evaluating plan readiness..."
+
+        set -l gate_output (command claude -p $perm_flag --model haiku --effort low \
+            "Read plan at $current_plan. Evaluate: sufficient detail, clear scope, testable outcomes. If any part is too vague, output what's missing. If all automatable, output only \"READY\".")
+
+        if not string match -q "*READY*" $gate_output
+            echo "❌ Gate rejected. Feedback:" >&2
+            echo "$gate_output" >&2
+            return 1
+        end
+        echo "✅ Gate passed."
+
+        # ===== IMPLEMENT =====
         echo ""
+        echo "📝 Implement (TDD Red/Green)..."
 
-        # ===== PHASE 1: IMPLEMENT (Red/Green) =====
-        echo "📝 Phase 1: Implement (TDD Red/Green)..."
+        set -l impl_prompt (__autoplan_interpolate_prompt \
+            (__autoplan_load_prompt "$prompts_path" implement) \
+            $current_plan $branch)
 
-        command claude -p $perm_flag --model sonnet --effort high \
-            --append-system-prompt "$impl_system" \
-            "Read the plan at $plan_file. Find the next incomplete phase. Use /tdd skill — write tests first (RED), then implement to pass (GREEN). Follow SOLID principles."
+        if test -z "$impl_prompt"
+            set impl_prompt "Read the plan at $current_plan. Use /tdd skill -- write tests first (RED), then implement to pass (GREEN). Follow SOLID principles. Do NOT commit."
+        end
 
+        command claude -p $perm_flag --model sonnet --effort high "$impl_prompt"
         if test $status -ne 0
-            echo "❌ Phase 1 (Implement) failed. Aborting loop." >&2
+            echo "❌ Implement failed." >&2
             return 1
         end
 
-        # ===== PHASE 2: HARDEN/REFACTOR =====
-        echo ""
-        echo "🔨 Phase 2: Harden/Refactor..."
+        # ===== TEST/FIX LOOP =====
+        set -l fix_attempt 0
 
-        command claude -p $perm_flag --model sonnet --effort high \
-            --append-system-prompt "$harden_system" \
-            "Review all uncommitted changes for this project. Identify and fix: duplication, inconsistencies, dead code, missing coverage, SOLID violations. Re-run tests after each change. The plan at $plan_file provides context."
+        while true
+            echo ""
+            echo "🧪 Running tests..."
 
-        if test $status -ne 0
-            echo "⚠️  Phase 2 (Harden/Refactor) failed. Continuing anyway." >&2
+            if eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
+                echo "✅ Tests pass."
+                break
+            else
+                set fix_attempt (math $fix_attempt + 1)
+                if test $fix_attempt -ge $max_fix_attempts
+                    echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
+                    echo "Test output: ./tmp/autoplan-test-output.txt" >&2
+                    return 1
+                end
+
+                echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
+
+                set -l fix_prompt (__autoplan_interpolate_prompt \
+                    (__autoplan_load_prompt "$prompts_path" fix_test) \
+                    $current_plan $branch)
+
+                if test -z "$fix_prompt"
+                    set fix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt. Read, diagnose, fix. Do NOT weaken assertions. Do NOT skip tests. Do NOT commit."
+                end
+
+                claude $perm_flag --permission-mode plan "$fix_prompt"
+            end
         end
 
-        # ===== PHASE 3: VERIFY & COMMIT =====
+        # ===== HARDEN =====
         echo ""
-        echo "✔️  Phase 3: Verify & Commit..."
+        echo "🔨 Harden..."
+
+        set -l harden_prompt (__autoplan_interpolate_prompt \
+            (__autoplan_load_prompt "$prompts_path" harden) \
+            $current_plan $branch)
+
+        if test -z "$harden_prompt"
+            set harden_prompt "Review all uncommitted changes. Fix: duplication, SOLID violations, dead code, missing coverage. Re-run tests after each change. The plan at $current_plan provides context. Do NOT commit."
+        end
+
+        command claude -p $perm_flag --model sonnet --effort high "$harden_prompt"
+
+        # ===== VERIFY/FIX LOOP =====
+        set -l verify_pass 0
+
+        while true
+            set verify_pass (math $verify_pass + 1)
+            if test $verify_pass -gt $max_verify_passes
+                echo "❌ Verify still finding issues after $max_verify_passes passes." >&2
+                return 1
+            end
+
+            echo ""
+            echo "🔎 Verify (pass $verify_pass/$max_verify_passes)..."
+
+            rm -f ./tmp/autoplan-verify-result.txt
+
+            set -l verify_prompt (__autoplan_interpolate_prompt \
+                (__autoplan_load_prompt "$prompts_path" verify) \
+                $current_plan $branch)
+
+            if test -z "$verify_prompt"
+                set verify_prompt "Read the plan at $current_plan. Audit all changes on branch $branch. YOUR ROLE IS AUDIT-ONLY. Do NOT edit files, commit, push, or open a PR.
+Check: (1) All scope items implemented, (2) Verification criteria from the plan are met, (3) No regressions, (4) Code quality (SOLID, no dead code).
+If ALL checks pass: write ALL_GOOD to ./tmp/autoplan-verify-result.txt.
+If ANY fail: write ISSUES_FOUND on line 1 of ./tmp/autoplan-verify-result.txt, numbered issues below."
+            end
+
+            command claude -p $perm_flag --model sonnet --effort medium "$verify_prompt"
+
+            if not test -f ./tmp/autoplan-verify-result.txt
+                echo "❌ Verify did not write sentinel file." >&2
+                return 1
+            end
+
+            if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
+                echo "✅ Verify passed."
+                break
+            else if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ISSUES_FOUND'
+                echo "⚠️  Verify found issues. Fixing..."
+
+                set -l fix_verify_prompt (__autoplan_interpolate_prompt \
+                    (__autoplan_load_prompt "$prompts_path" fix_verify) \
+                    $current_plan $branch)
+
+                if test -z "$fix_verify_prompt"
+                    set fix_verify_prompt "Verify step found issues. Read ./tmp/autoplan-verify-result.txt. Fix each issue. Do NOT weaken/skip tests. Do NOT push or open a PR. Do NOT commit."
+                end
+
+                claude $perm_flag --permission-mode plan "$fix_verify_prompt"
+
+                # Reset fix attempts and go back through test/fix loop
+                set fix_attempt 0
+                while true
+                    echo ""
+                    echo "🧪 Re-running tests after verify fix..."
+
+                    if eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
+                        echo "✅ Tests pass."
+                        break
+                    else
+                        set fix_attempt (math $fix_attempt + 1)
+                        if test $fix_attempt -ge $max_fix_attempts
+                            echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
+                            return 1
+                        end
+
+                        echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
+
+                        set -l refix_prompt (__autoplan_interpolate_prompt \
+                            (__autoplan_load_prompt "$prompts_path" fix_test) \
+                            $current_plan $branch)
+
+                        if test -z "$refix_prompt"
+                            set refix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt. Read, diagnose, fix. Do NOT weaken assertions. Do NOT skip tests. Do NOT commit."
+                        end
+
+                        claude $perm_flag --permission-mode plan "$refix_prompt"
+                    end
+                end
+                # Continue verify loop
+            else
+                echo "❌ Verify did not write a recognized sentinel." >&2
+                return 1
+            end
+        end
+
+        # Save next and prompts_path BEFORE commit deletes the plan file
+        set -l next_plan (__autoplan_frontmatter $current_plan next)
+
+        # ===== COMMIT =====
+        echo ""
+        echo "💾 Commit..."
 
         command claude -p $perm_flag --model haiku --effort medium \
-            --append-system-prompt "$verify_system" \
-            "Run ALL tests/checks — fix any failures. Mark the completed phase done in the plan at $plan_file. Commit with a gitmoji message. If ALL phases are now complete: commit removal of the plan file, update any parent plans/docs that reference it to mark completion."
+            "Run ALL tests/checks. Fix any failures. Commit all changes with a gitmoji message. Then delete the plan file $current_plan and commit that deletion."
 
-        if test $status -ne 0
-            echo "❌ Phase 3 (Verify & Commit) failed. Aborting loop." >&2
-            return 1
-        end
-
-        # Check if plan file still exists
-        if not test -f $plan_file
+        # Follow linked list
+        if test -n "$next_plan"
+            # Resolve next path relative to the completed plan's directory
+            if test ! -f "$next_plan"
+                set -l plan_dir (dirname $current_plan)
+                set next_plan "$plan_dir/$next_plan"
+            end
+            set next_plan (realpath $next_plan)
+            if not test -f $next_plan
+                echo "❌ Next plan not found: $next_plan" >&2
+                return 1
+            end
+            set current_plan $next_plan
+        else
             break
         end
     end
 
-    # ===== SUMMARY =====
+    # ===== PR =====
+    if not set -q _flag_no_pr
+        echo ""
+        echo "🚀 Creating PR..."
+
+        set -l pr_body (command claude -p $perm_flag --model haiku --effort low \
+            "Generate a concise PR summary from the git diff and log on branch $branch vs origin/main. Output markdown with ## Summary and ## Changes sections. No preamble.")
+
+        git push origin $branch
+
+        if gh pr view $branch >/dev/null 2>&1
+            echo "PR already exists for $branch."
+        else
+            gh pr create --title "$pr_title" --body "$pr_body"
+        end
+    end
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "✅ Autoplan complete."
+    return 0
+end
 
-    if not test -f $plan_file
-        echo "✅ Autoplan complete — all phases done in $iteration iterations."
-        return 0
-    else
-        echo "⚠️  Autoplan loop exited but plan file still exists."
-        return 1
+# --- Helper functions ---
+
+function __autoplan_frontmatter --argument-names plan_file key --description "Extract a frontmatter value from a plan file"
+    sed -n '/^---$/,/^---$/p' $plan_file | grep "^$key:" | sed "s/^$key: *//" | tr -d '"' | string trim
+end
+
+function __autoplan_load_prompt --argument-names prompts_file stage --description "Load a prompt section from a prompts file"
+    if test -z "$prompts_file" -o ! -f "$prompts_file"
+        return
     end
+    # Extract from ## stage to next ## header (inclusive), drop header lines
+    sed -n "/^## $stage\$/,/^## /p" $prompts_file | sed '1d' | grep -v '^## '
+end
+
+function __autoplan_interpolate_prompt --description "Interpolate variables in a prompt string"
+    # Args: prompt_text plan_file branch
+    set -l prompt_text $argv[1]
+    set -l plan_file $argv[2]
+    set -l branch_name $argv[3]
+
+    if test -z "$prompt_text"
+        return
+    end
+
+    echo $prompt_text \
+        | string replace -a '$PLAN_FILE' "$plan_file" \
+        | string replace -a '$TEST_LOG' './tmp/autoplan-test-output.txt' \
+        | string replace -a '$VERIFY_LOG' './tmp/autoplan-verify-result.txt' \
+        | string replace -a '$BRANCH' "$branch_name"
 end
