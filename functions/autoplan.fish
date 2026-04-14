@@ -85,14 +85,22 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
         # ===== GATE =====
-        echo "🔍 Gate: Evaluating plan readiness..."
+        echo "🔍 Gate: Evaluating and fixing plan if needed..."
 
-        set -l gate_output (command claude -p $perm_flag --model haiku --effort low \
-            "Read plan at $current_plan. Evaluate: sufficient detail, clear scope, testable outcomes. If any part is too vague, output what's missing. If all automatable, output only \"READY\".")
+        rm -f ./tmp/autoplan-gate-output.txt
+        set -l gate_prompt_file "$HOME/.claude/skills/prepare-autoplan/references/gate-prompt.md"
+        set -l gate_prompt (cat $gate_prompt_file \
+            | string replace -a -- '$PLAN_FILE' "$current_plan" \
+            | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt')
+        command claude $perm_flag --model sonnet --effort medium "$gate_prompt"
+        set -l gate_output (cat ./tmp/autoplan-gate-output.txt 2>/dev/null)
 
-        if not string match -q -- "*READY*" $gate_output
-            echo "❌ Gate rejected. Feedback:" >&2
+        if string match -q -- "*CANNOT_FIX*" $gate_output
+            echo "❌ Gate: plan cannot be made automatable:" >&2
             echo "$gate_output" >&2
+            return 1
+        else if not string match -q -- "*READY*" $gate_output
+            echo "❌ Gate: sentinel file missing or unrecognised." >&2
             return 1
         end
         echo "✅ Gate passed."
@@ -103,13 +111,15 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         set -l impl_prompt (__autoplan_interpolate_prompt \
             (__autoplan_load_prompt "$prompts_path" implement) \
-            $current_plan $branch)
+            $current_plan $branch $test_cmd)
 
         if test -z "$impl_prompt"
-            set impl_prompt "Read the plan at $current_plan. Use /tdd skill -- write tests first (RED), then implement to pass (GREEN). Follow SOLID principles. Do NOT commit."
+            set impl_prompt (__autoplan_interpolate_prompt \
+                (cat "$HOME/.claude/skills/prepare-autoplan/references/implement-prompt.md") \
+                $current_plan $branch $test_cmd)
         end
 
-        command claude -p $perm_flag --model sonnet --effort high "$impl_prompt"
+        command claude $perm_flag --model sonnet --effort high "$impl_prompt"
         if test $status -ne 0
             echo "❌ Implement failed." >&2
             return 1
@@ -137,15 +147,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                 set -l fix_prompt (__autoplan_interpolate_prompt \
                     (__autoplan_load_prompt "$prompts_path" fix_test) \
-                    $current_plan $branch)
+                    $current_plan $branch $test_cmd)
 
                 if test -z "$fix_prompt"
-                    set fix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt.
-Follow TDD: red → green → commit.
-1. Read the test output to understand failures.
-2. Fix the root cause. Do NOT weaken assertions. Do NOT skip or remove tests.
-3. Re-run tests to confirm they pass.
-4. Commit fixes."
+                    set fix_prompt (__autoplan_interpolate_prompt \
+                        (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
+                        $current_plan $branch $test_cmd)
                 end
 
                 claude $perm_flag --permission-mode plan "$fix_prompt"
@@ -158,13 +165,15 @@ Follow TDD: red → green → commit.
 
         set -l harden_prompt (__autoplan_interpolate_prompt \
             (__autoplan_load_prompt "$prompts_path" harden) \
-            $current_plan $branch)
+            $current_plan $branch $test_cmd)
 
         if test -z "$harden_prompt"
-            set harden_prompt "Review all uncommitted changes. Fix: duplication, SOLID violations, dead code, missing coverage. Re-run tests after each change. The plan at $current_plan provides context. Do NOT commit."
+            set harden_prompt (__autoplan_interpolate_prompt \
+                (cat "$HOME/.claude/skills/prepare-autoplan/references/harden-prompt.md") \
+                $current_plan $branch $test_cmd)
         end
 
-        command claude -p $perm_flag --model sonnet --effort high "$harden_prompt"
+        command claude $perm_flag --model sonnet --effort high "$harden_prompt"
 
         # ===== VERIFY/FIX LOOP =====
         set -l verify_pass 0
@@ -183,16 +192,15 @@ Follow TDD: red → green → commit.
 
             set -l verify_prompt (__autoplan_interpolate_prompt \
                 (__autoplan_load_prompt "$prompts_path" verify) \
-                $current_plan $branch)
+                $current_plan $branch $test_cmd)
 
             if test -z "$verify_prompt"
-                set verify_prompt "Read the plan at $current_plan. Audit all changes on branch $branch. YOUR ROLE IS AUDIT-ONLY. Do NOT edit files, commit, push, or open a PR.
-Check: (1) All scope items implemented, (2) Verification criteria from the plan are met, (3) No regressions, (4) Code quality (SOLID, no dead code).
-If ALL checks pass: write ALL_GOOD to ./tmp/autoplan-verify-result.txt.
-If ANY fail: write ISSUES_FOUND on line 1 of ./tmp/autoplan-verify-result.txt, numbered issues below."
+                set verify_prompt (__autoplan_interpolate_prompt \
+                    (cat "$HOME/.claude/skills/prepare-autoplan/references/verify-prompt.md") \
+                    $current_plan $branch $test_cmd)
             end
 
-            command claude -p $perm_flag --model sonnet --effort medium "$verify_prompt"
+            command claude $perm_flag --model sonnet --effort medium "$verify_prompt"
 
             if not test -f ./tmp/autoplan-verify-result.txt
                 echo "❌ Verify did not write sentinel file." >&2
@@ -207,15 +215,12 @@ If ANY fail: write ISSUES_FOUND on line 1 of ./tmp/autoplan-verify-result.txt, n
 
                 set -l fix_verify_prompt (__autoplan_interpolate_prompt \
                     (__autoplan_load_prompt "$prompts_path" fix_verify) \
-                    $current_plan $branch)
+                    $current_plan $branch $test_cmd)
 
                 if test -z "$fix_verify_prompt"
-                    set fix_verify_prompt "Verify step found issues. Read ./tmp/autoplan-verify-result.txt.
-Follow TDD: red → green → commit.
-1. Read each issue.
-2. Fix the issues. Do NOT weaken, skip, or remove tests. Do NOT push or open a PR.
-3. Re-run tests to confirm they pass.
-4. Commit fixes."
+                    set fix_verify_prompt (__autoplan_interpolate_prompt \
+                        (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-verify-prompt.md") \
+                        $current_plan $branch $test_cmd)
                 end
 
                 claude $perm_flag --permission-mode plan "$fix_verify_prompt"
@@ -240,15 +245,12 @@ Follow TDD: red → green → commit.
 
                         set -l refix_prompt (__autoplan_interpolate_prompt \
                             (__autoplan_load_prompt "$prompts_path" fix_test) \
-                            $current_plan $branch)
+                            $current_plan $branch $test_cmd)
 
                         if test -z "$refix_prompt"
-                            set refix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt.
-Follow TDD: red → green → commit.
-1. Read the test output to understand failures.
-2. Fix the root cause. Do NOT weaken assertions. Do NOT skip or remove tests.
-3. Re-run tests to confirm they pass.
-4. Commit fixes."
+                            set refix_prompt (__autoplan_interpolate_prompt \
+                                (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
+                                $current_plan $branch $test_cmd)
                         end
 
                         claude $perm_flag --permission-mode plan "$refix_prompt"
@@ -268,8 +270,10 @@ Follow TDD: red → green → commit.
         echo ""
         echo "💾 Commit..."
 
-        command claude -p $perm_flag --model haiku --effort medium \
-            "Run ALL tests/checks. Fix any failures. Commit all changes with a gitmoji message. Then delete the plan file $current_plan and commit that deletion."
+        set -l commit_prompt (__autoplan_interpolate_prompt \
+            (cat "$HOME/.claude/skills/prepare-autoplan/references/commit-prompt.md") \
+            $current_plan $branch $test_cmd)
+        command claude $perm_flag --model haiku --effort medium "$commit_prompt"
 
         # Follow linked list
         if test -n "$next_plan"
@@ -294,8 +298,12 @@ Follow TDD: red → green → commit.
         echo ""
         echo "🚀 Creating PR..."
 
-        set -l pr_body (command claude -p $perm_flag --model haiku --effort low \
-            "Generate a concise PR summary from the git diff and log on branch $branch vs origin/main. Output markdown with ## Summary and ## Changes sections. No preamble.")
+        rm -f ./tmp/autoplan-pr-body.txt
+        set -l pr_prompt (__autoplan_interpolate_prompt \
+            (cat "$HOME/.claude/skills/prepare-autoplan/references/pr-body-prompt.md") \
+            $current_plan $branch $test_cmd)
+        command claude $perm_flag --model haiku --effort low "$pr_prompt"
+        set -l pr_body (cat ./tmp/autoplan-pr-body.txt 2>/dev/null)
 
         git push origin $branch
 
@@ -327,18 +335,23 @@ function __autoplan_load_prompt --argument-names prompts_file stage --descriptio
 end
 
 function __autoplan_interpolate_prompt --description "Interpolate variables in a prompt string"
-    # Args: prompt_text plan_file branch
-    set -l prompt_text $argv[1]
-    set -l plan_file $argv[2]
-    set -l branch_name $argv[3]
+    # Calling convention: all args except last three are prompt lines; last three are plan_file, branch, test_cmd.
+    # __autoplan_load_prompt output is split into a fish list by command substitution, so we must
+    # join everything before plan_file/branch/test_cmd rather than assuming a fixed argv[1].
+    set -l test_cmd_val $argv[-1]
+    set -l branch_name $argv[-2]
+    set -l plan_file $argv[-3]
+    set -l prompt_lines $argv[1..-4]
 
-    if test -z "$prompt_text"
+    if test (count $prompt_lines) -eq 0
         return
     end
 
-    echo $prompt_text \
-        | string replace -a '$PLAN_FILE' "$plan_file" \
-        | string replace -a '$TEST_LOG' './tmp/autoplan-test-output.txt' \
-        | string replace -a '$VERIFY_LOG' './tmp/autoplan-verify-result.txt' \
-        | string replace -a '$BRANCH' "$branch_name"
+    printf '%s\n' $prompt_lines \
+        | string replace -a -- '$PLAN_FILE' "$plan_file" \
+        | string replace -a -- '$TEST_LOG' './tmp/autoplan-test-output.txt' \
+        | string replace -a -- '$VERIFY_LOG' './tmp/autoplan-verify-result.txt' \
+        | string replace -a -- '$BRANCH' "$branch_name" \
+        | string replace -a -- '$TEST_CMD' "$test_cmd_val" \
+        | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt'
 end

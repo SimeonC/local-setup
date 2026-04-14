@@ -8,6 +8,8 @@
 | `$TEST_LOG` | `./tmp/autoplan-test-output.txt` |
 | `$VERIFY_LOG` | `./tmp/autoplan-verify-result.txt` |
 | `$BRANCH` | The git branch name from plan frontmatter |
+| `$TEST_CMD` | The test command from plan frontmatter |
+| `$GATE_LOG` | `./tmp/autoplan-gate-output.txt` |
 
 ## Sections
 
