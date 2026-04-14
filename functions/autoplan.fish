@@ -132,7 +132,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo ""
             echo "🧪 Running tests..."
 
-            if CI=true eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
+            if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
                 echo "✅ Tests pass."
                 break
             else
@@ -231,7 +231,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     echo ""
                     echo "🧪 Re-running tests after verify fix..."
 
-                    if CI=true eval $test_cmd >./tmp/autoplan-test-output.txt 2>&1
+                    if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
                         echo "✅ Tests pass."
                         break
                     else
@@ -355,4 +355,18 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
         | string replace -a -- '$BRANCH' "$branch_name" \
         | string replace -a -- '$TEST_CMD' "$test_cmd_val" \
         | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt'
+end
+
+function __autoplan_run_tests --argument-names test_cmd output_file --description "Run test command(s), splitting on && for progress output"
+    echo -n >$output_file
+    for cmd in (string split '&&' -- $test_cmd)
+        set cmd (string trim $cmd)
+        test -z "$cmd"; and continue
+        echo "▶ $cmd"
+        CI=true eval $cmd 2>&1 | tee -a $output_file
+        if test $pipestatus[1] -ne 0
+            return 1
+        end
+    end
+    return 0
 end
