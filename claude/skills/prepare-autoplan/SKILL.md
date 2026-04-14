@@ -22,6 +22,7 @@ Use AskUserQuestion (up to 2 rounds, max 4 questions each).
 - Domain-specific conventions for implementation (imports, patterns, file locations)
 - Domain-specific verification checks (what to audit beyond "tests pass")
 - Any "never do" rules for fix steps (e.g. "never skip tests", "never weaken assertions")
+- How do you run a single failing test file? (e.g. `npx nx run myapp:playwright -- <file>` or `npm run test:ai -- --testPathPattern=<file>`)
 
 Also ask where to create the plan file (suggest current working directory).
 
@@ -33,75 +34,33 @@ Create two files in the chosen directory:
 - `<slug>.md` — the plan file
 - `<slug>-prompts.md` — the prompts file
 
-### Plan file format
+See [plan-format.md](references/plan-format.md) and [prompts-format.md](references/prompts-format.md) for format specs.
+
+Key points for prompts file:
+- Populate all 5 sections with domain-specific rules from Step 1
+- `fix_test` and `fix_verify` must follow the TDD red→green→commit pattern:
 
 ```markdown
----
-branch: feat/...           # required
-test_cmd: npm run test:ai   # required
-pr_title: "..."             # required
-prompts: ./<slug>-prompts.md # required
-next: ./<slug>-2.md         # optional, only if chain exists
----
-
-# Title
-
-## Context
-Why this work is needed.
-
-## Scope
-- Concrete list of what to implement (specific files, functions, interfaces)
-- NOT vague ("refactor X", "improve Y")
-
-## Verification
-- Specific, automatable checks (commands that pass/fail)
-- NOT subjective ("looks correct")
-```
-
-### Prompts file format
-
-```markdown
-# Prompts: <task name>
-
-## implement
-<domain-specific implementation instructions>
-Read the plan at $PLAN_FILE. Use /tdd skill.
-Rules:
-- [domain conventions from Step 1]
-
 ## fix_test
-<domain-specific test fix instructions>
-Tests failing. Output at $TEST_LOG. Diagnose and fix.
-Rules:
-- Do NOT weaken assertions or skip tests
-- [domain-specific rules from Step 1]
+Tests are failing. Output at $TEST_LOG.
+Follow TDD: red → green → commit.
+1. Read the test output to understand failures.
+2. Run the failing tests to confirm: [HOW TO RUN SINGLE FAILING FILE]
+3. Fix the root cause. Do NOT weaken assertions. Do NOT skip or remove tests.
+4. Re-run tests to confirm they pass.
+5. Commit fixes.
 
 ## fix_verify
-<domain-specific verify fix instructions>
-Verify step flagged issues in $VERIFY_LOG. Fix them.
-Rules:
-- Do NOT weaken/skip tests. Do NOT push.
-- [domain-specific rules from Step 1]
-
-## verify
-<domain-specific audit checklist>
-Audit-only. Do NOT edit files, commit, push, or open a PR.
-Check:
-1. [specific structural check]
-2. [specific structural check]
-...
-Write ALL_GOOD to $VERIFY_LOG if all pass.
-Write ISSUES_FOUND on line 1, numbered issues below, if any fail.
-
-## harden
-<domain-specific hardening guidance>
-Review uncommitted changes. Fix: duplication, SOLID violations, dead code, missing coverage.
-Re-run tests after each change. Context: $PLAN_FILE.
+Verify step found issues. Read $VERIFY_LOG.
+Follow TDD: red → green → commit.
+1. Read each issue.
+2. Run the affected tests to confirm: [HOW TO RUN SINGLE FAILING FILE]
+3. Fix the issues. Do NOT weaken, skip, or remove tests. Do NOT push or open a PR.
+4. Re-run tests to confirm they pass.
+5. Commit fixes.
 ```
 
-**Variables available in prompts:** `$PLAN_FILE`, `$TEST_LOG`, `$VERIFY_LOG`, `$BRANCH`
-
-Populate all 5 sections with the domain-specific rules gathered in Step 1.
+Replace `[HOW TO RUN SINGLE FAILING FILE]` with the command gathered in Step 1 Round 2.
 
 ## Step 3: Evaluate Atomicity
 

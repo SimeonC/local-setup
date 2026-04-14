@@ -136,7 +136,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     $current_plan $branch)
 
                 if test -z "$fix_prompt"
-                    set fix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt. Read, diagnose, fix. Do NOT weaken assertions. Do NOT skip tests. Do NOT commit."
+                    set fix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt.
+Follow TDD: red → green → commit.
+1. Read the test output to understand failures.
+2. Fix the root cause. Do NOT weaken assertions. Do NOT skip or remove tests.
+3. Re-run tests to confirm they pass.
+4. Commit fixes."
                 end
 
                 claude $perm_flag --permission-mode plan "$fix_prompt"
@@ -201,7 +206,12 @@ If ANY fail: write ISSUES_FOUND on line 1 of ./tmp/autoplan-verify-result.txt, n
                     $current_plan $branch)
 
                 if test -z "$fix_verify_prompt"
-                    set fix_verify_prompt "Verify step found issues. Read ./tmp/autoplan-verify-result.txt. Fix each issue. Do NOT weaken/skip tests. Do NOT push or open a PR. Do NOT commit."
+                    set fix_verify_prompt "Verify step found issues. Read ./tmp/autoplan-verify-result.txt.
+Follow TDD: red → green → commit.
+1. Read each issue.
+2. Fix the issues. Do NOT weaken, skip, or remove tests. Do NOT push or open a PR.
+3. Re-run tests to confirm they pass.
+4. Commit fixes."
                 end
 
                 claude $perm_flag --permission-mode plan "$fix_verify_prompt"
@@ -229,7 +239,12 @@ If ANY fail: write ISSUES_FOUND on line 1 of ./tmp/autoplan-verify-result.txt, n
                             $current_plan $branch)
 
                         if test -z "$refix_prompt"
-                            set refix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt. Read, diagnose, fix. Do NOT weaken assertions. Do NOT skip tests. Do NOT commit."
+                            set refix_prompt "Tests are failing. Output at ./tmp/autoplan-test-output.txt.
+Follow TDD: red → green → commit.
+1. Read the test output to understand failures.
+2. Fix the root cause. Do NOT weaken assertions. Do NOT skip or remove tests.
+3. Re-run tests to confirm they pass.
+4. Commit fixes."
                         end
 
                         claude $perm_flag --permission-mode plan "$refix_prompt"
