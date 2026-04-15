@@ -35,6 +35,10 @@ if [ -x .devcontainer/setup.sh ]; then
     ~/.local/bin/mise exec -- .devcontainer/setup.sh
 fi
 
+if [ -f package.json ] && grep -qE '"@?playwright' package.json; then
+    npx playwright install
+fi
+
 echo "==> Updating Claude Code"
 claude update
 
