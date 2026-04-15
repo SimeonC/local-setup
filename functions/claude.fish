@@ -2,7 +2,7 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
     # Pass-through for non-interactive subcommands
     if test (count $argv) -ge 1
         switch "$argv[1]"
-            case update mcp config --help -h --version -v
+            case update upgrade mcp config doctor install agents auto-mode auth plugin plugins --help -h --version -v
                 command claude $argv
                 return
         end
