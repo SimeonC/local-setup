@@ -14,8 +14,6 @@ Follow TDD: red -> green -> commit.
 
 ## Rules
 
-- Do NOT weaken, skip, or remove tests to make issues disappear.
 - Do NOT remove validation logic or compile-time checks that the verifier flagged as important.
 - Fix missing fields or data by checking the plan spec at $PLAN_FILE — the plan is the source of truth.
 - Fix malformed outputs by comparing against the expected shapes defined in the plan.
-- Do NOT push or open a PR — the pipeline handles that.

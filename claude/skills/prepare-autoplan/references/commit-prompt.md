@@ -1,12 +1,6 @@
 Finalize and commit all changes for the current plan iteration.
 
-## Step 1: Run all tests
-
-Run the full test suite: `$TEST_CMD`
-- If any test fails, fix the failure before proceeding. Do NOT commit with failing tests.
-- If a linter or compiler check is available in the project, run it too and fix any warnings/errors.
-
-## Step 2: Commit implementation changes
+## Step 1: Commit implementation changes
 
 Stage and commit all implementation changes (source code + test files) with a gitmoji commit message.
 
@@ -19,15 +13,17 @@ Gitmoji conventions:
 
 The commit message should be a short summary of what changed and why — reference the plan's title or context for the "why".
 
-## Step 3: Delete the plan and prompts files
+## Step 2: Delete the plan and prompts files
 
-Delete the plan file at `$PLAN_FILE` and the prompts file at `$PROMPTS_FILE` (if it exists), then commit those deletions as a separate commit:
+Delete the plan file at `$PLAN_FILE` and the prompts file at `$PROMPTS_FILE` (if it exists).
+
+Also look for any other leftover plan or prompts files that were part of this chain (same directory, same naming pattern) and delete those too.
+
+Commit all deletions as a separate commit:
 ```
 🔥 Remove completed plan
 ```
 
 ## Rules
 
-- Do NOT include temporary files (./tmp/*, *.log) in any commit.
-- Do NOT push to remote or open a PR — the pipeline handles that.
 - Do NOT amend previous commits — always create new commits.

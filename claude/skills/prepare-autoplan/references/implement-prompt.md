@@ -14,9 +14,6 @@ Use /tdd skill — write tests first (RED), then implement to pass (GREEN).
 
 ## Rules
 
-- Follow existing codebase patterns and conventions — match naming, file structure, and idioms already in use.
 - Reuse existing utilities and helpers. Search the codebase before writing new ones.
-- Follow SOLID principles.
 - Every new public function or endpoint MUST have at least one test.
 - Do NOT leave TODO comments, placeholder implementations, or skipped tests.
-- Do NOT commit — the pipeline handles commits later.

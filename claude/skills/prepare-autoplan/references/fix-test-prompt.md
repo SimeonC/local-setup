@@ -12,9 +12,6 @@ Follow TDD: red -> green -> commit.
 
 ## Rules
 
-- Do NOT weaken assertions to make tests pass — fix the implementation instead.
-- Do NOT skip, disable, or remove failing tests.
-- Do NOT change expected values to match wrong output — the test defines the contract.
 - Check for compile-time or lint warnings that could block CI.
 - Verify that new code is properly wired into existing call chains (e.g., new functions are actually called, new modules are imported).
 - If a fix touches shared code, check callers for unintended side effects.

@@ -15,10 +15,15 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     set -l max_fix_attempts (set -q _flag_max_fix_attempts; and echo $_flag_max_fix_attempts; or echo 3)
     set -l max_verify_passes (set -q _flag_max_verify_passes; and echo $_flag_max_verify_passes; or echo 3)
 
-    # Permission flag for devcontainer
-    set -l perm_flag
+    # Permission mode
+    set -l permission_mode acceptEdits
     if set -q DEVCONTAINER
-        set perm_flag --dangerously-skip-permissions
+        set permission_mode bypassPermissions
+    else
+        read -P "Allow Claude to skip permissions (dangerous mode)? [y/N] " -l _dangerous_mode
+        if string match -qi 'y*' $_dangerous_mode
+            set permission_mode bypassPermissions
+        end
     end
 
     # ===== SETUP =====
@@ -61,6 +66,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
     mkdir -p ./tmp
 
+    set -l base_system_prompt "## Autoplan Global Rules
+- Write any temporary context or source-dump files to ./tmp/ with an autoplan- prefix (e.g. ./tmp/autoplan-context.txt). Never write to /tmp/ (global) or the project root.
+- Do NOT commit — the pipeline handles commits separately.
+- Do NOT push to remote or open a PR — the pipeline handles that.
+- Do NOT weaken, skip, disable, or remove tests to fix failures — fix the implementation instead.
+- Follow SOLID principles.
+- Follow existing codebase patterns and conventions — match naming, file structure, and idioms already in use."
+
     # ===== MAIN LOOP (linked list traversal) =====
     set -l current_plan $plan_file
 
@@ -92,7 +105,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         set -l gate_prompt (cat $gate_prompt_file \
             | string replace -a -- '$PLAN_FILE' "$current_plan" \
             | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt')
-        command claude $perm_flag --model sonnet --effort medium "$gate_prompt"
+        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$gate_prompt"
         set -l gate_output (cat ./tmp/autoplan-gate-output.txt 2>/dev/null)
 
         if string match -q -- "*CANNOT_FIX*" $gate_output
@@ -119,7 +132,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 $current_plan $branch $test_cmd)
         end
 
-        command claude $perm_flag --model sonnet --effort high "$impl_prompt"
+        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$impl_prompt"
         if test $status -ne 0
             echo "❌ Implement failed." >&2
             return 1
@@ -155,7 +168,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         $current_plan $branch $test_cmd)
                 end
 
-                claude $perm_flag --permission-mode plan "$fix_prompt"
+                claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_prompt"
             end
         end
 
@@ -173,7 +186,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 $current_plan $branch $test_cmd)
         end
 
-        command claude $perm_flag --model sonnet --effort high "$harden_prompt"
+        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$harden_prompt"
 
         # ===== VERIFY/FIX LOOP =====
         set -l verify_pass 0
@@ -200,7 +213,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     $current_plan $branch $test_cmd)
             end
 
-            command claude $perm_flag --model sonnet --effort medium "$verify_prompt"
+            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$verify_prompt"
 
             if not test -f ./tmp/autoplan-verify-result.txt
                 echo "❌ Verify did not write sentinel file." >&2
@@ -223,7 +236,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         $current_plan $branch $test_cmd)
                 end
 
-                claude $perm_flag --permission-mode plan "$fix_verify_prompt"
+                claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_verify_prompt"
 
                 # Reset fix attempts and go back through test/fix loop
                 set fix_attempt 0
@@ -253,7 +266,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                                 $current_plan $branch $test_cmd)
                         end
 
-                        claude $perm_flag --permission-mode plan "$refix_prompt"
+                        claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $refix_prompt"
                     end
                 end
                 # Continue verify loop
@@ -274,7 +287,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             (cat "$HOME/.claude/skills/prepare-autoplan/references/commit-prompt.md") \
             $current_plan $branch $test_cmd)
         set commit_prompt (string replace -a -- '$PROMPTS_FILE' "$prompts_path" $commit_prompt)
-        command claude $perm_flag --model haiku --effort medium "$commit_prompt"
+        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
 
         # Follow linked list
         if test -n "$next_plan"
@@ -303,7 +316,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         set -l pr_prompt (__autoplan_interpolate_prompt \
             (cat "$HOME/.claude/skills/prepare-autoplan/references/pr-body-prompt.md") \
             $current_plan $branch $test_cmd)
-        command claude $perm_flag --model haiku --effort low "$pr_prompt"
+        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort low "$pr_prompt"
         set -l pr_body (cat ./tmp/autoplan-pr-body.txt 2>/dev/null)
 
         git push origin $branch
@@ -314,6 +327,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             gh pr create --title "$pr_title" --body "$pr_body"
         end
     end
+
+    # ===== CLEANUP =====
+    rm -f ./tmp/autoplan-*
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

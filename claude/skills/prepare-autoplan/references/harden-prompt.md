@@ -15,4 +15,3 @@ Address issues in this order — correctness before aesthetics:
 - Reuse existing helpers and utilities — if you see duplicated logic, extract it only if there is a clear existing pattern to follow.
 - Check that error handling covers nil/empty/missing gracefully (return sensible defaults, not crashes).
 - Do NOT add new features or expand scope beyond what the plan specifies.
-- Do NOT commit — the pipeline handles commits later.
