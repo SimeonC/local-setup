@@ -16,3 +16,4 @@ secure
 .cursor/debug.log
 fish_variables*
 /claude/devcontainer/.rebuild-hashes/
+.playwright-cli
