@@ -1,14 +1,13 @@
 function autoplan --description "Iterative TDD loop driven by a linked list of markdown plan files"
-    argparse 'max-fix-attempts=' 'max-verify-passes=' 'no-pr' 'resume' -- $argv
+    argparse 'max-fix-attempts=' 'max-verify-passes=' 'no-pr' 'resume' 'continue' -- $argv
 
-    if test (count $argv) -eq 0
-        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--no-pr] [--resume]" >&2
-        return 1
-    end
-
-    set -l plan_file (realpath $argv[1])
-    if not test -f $plan_file
-        echo "Error: Plan file not found: $argv[1]" >&2
+    if set -q _flag_continue
+        if not test -f .autoplan-progress
+            echo "Error: No .autoplan-progress file found. Cannot --continue without it." >&2
+            return 1
+        end
+    else if test (count $argv) -eq 0
+        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--no-pr] [--resume] [--continue]" >&2
         return 1
     end
 
@@ -27,10 +26,46 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     end
 
     # ===== SETUP =====
-    set -l branch (__autoplan_frontmatter $plan_file branch)
+    set -l plan_file ""
+    set -l branch ""
+    set -l current_plan ""
+    # Clear any stale global skip_to_phase from a previous run in this session
+    set -eg skip_to_phase
+
+    if set -q _flag_continue
+        # Load state from .autoplan-progress
+        for _line in (cat .autoplan-progress)
+            set -l _parts (string split -m 1 '=' $_line)
+            switch $_parts[1]
+                case root_plan; set plan_file $_parts[2]
+                case plan;      set current_plan $_parts[2]
+                case phase;     set -g skip_to_phase $_parts[2]
+                case branch;    set branch $_parts[2]
+            end
+        end
+        if not git show-ref --verify --quiet refs/heads/$branch
+            echo "Error: Branch $branch not found in local refs." >&2
+            return 1
+        end
+        if test (git branch --show-current) != $branch
+            git checkout $branch
+        end
+    else
+        set plan_file (realpath $argv[1])
+        if not test -f $plan_file
+            echo "Error: Plan file not found: $argv[1]" >&2
+            return 1
+        end
+        set current_plan $plan_file
+    end
+
     set -l test_cmd (__autoplan_frontmatter $plan_file test_cmd)
     set -l pr_title (__autoplan_frontmatter $plan_file pr_title)
     set -l prompts_path (__autoplan_frontmatter $plan_file prompts)
+
+    if test -z "$branch"
+        set branch (__autoplan_frontmatter $plan_file branch)
+    end
 
     if test -z "$branch"
         echo "Error: Plan file missing required frontmatter key: branch" >&2
@@ -51,7 +86,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         set prompts_path "$plan_dir/$prompts_path"
     end
 
-    if not set -q _flag_resume
+    if not set -q _flag_resume; and not set -q _flag_continue
         if git show-ref --verify --quiet refs/heads/$branch
             echo "Branch $branch already exists. Use --resume to continue." >&2
             return 1
@@ -75,8 +110,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 - Follow existing codebase patterns and conventions — match naming, file structure, and idioms already in use."
 
     # ===== MAIN LOOP (linked list traversal) =====
-    set -l current_plan $plan_file
-
     while true
         # Re-load per-plan overrides (test_cmd, prompts can be overridden)
         set -l plan_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
@@ -98,196 +131,214 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
         # ===== GATE =====
-        echo "🔍 Gate: Evaluating and fixing plan if needed..."
+        if not __autoplan_check_skip gate
+            __autoplan_save_state $plan_file $current_plan gate $branch
+            echo "🔍 Gate: Evaluating and fixing plan if needed..."
 
-        rm -f ./tmp/autoplan-gate-output.txt
-        set -l gate_prompt_file "$HOME/.claude/skills/prepare-autoplan/references/gate-prompt.md"
-        set -l gate_prompt (cat $gate_prompt_file \
-            | string replace -a -- '$PLAN_FILE' "$current_plan" \
-            | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt')
-        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$gate_prompt"
-        set -l gate_output (cat ./tmp/autoplan-gate-output.txt 2>/dev/null)
+            rm -f ./tmp/autoplan-gate-output.txt
+            set -l gate_prompt_file "$HOME/.claude/skills/prepare-autoplan/references/gate-prompt.md"
+            set -l gate_prompt (cat $gate_prompt_file \
+                | string replace -a -- '$PLAN_FILE' "$current_plan" \
+                | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt')
+            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$gate_prompt"
+            set -l gate_output (cat ./tmp/autoplan-gate-output.txt 2>/dev/null)
 
-        if string match -q -- "*CANNOT_FIX*" $gate_output
-            echo "❌ Gate: plan cannot be made automatable:" >&2
-            echo "$gate_output" >&2
-            return 1
-        else if not string match -q -- "*READY*" $gate_output
-            echo "❌ Gate: sentinel file missing or unrecognised." >&2
-            return 1
+            if string match -q -- "*CANNOT_FIX*" $gate_output
+                echo "❌ Gate: plan cannot be made automatable:" >&2
+                echo "$gate_output" >&2
+                return 1
+            else if not string match -q -- "*READY*" $gate_output
+                echo "❌ Gate: sentinel file missing or unrecognised." >&2
+                return 1
+            end
+            echo "✅ Gate passed."
         end
-        echo "✅ Gate passed."
 
         # ===== IMPLEMENT =====
-        echo ""
-        echo "📝 Implement (TDD Red/Green)..."
+        if not __autoplan_check_skip implement
+            __autoplan_save_state $plan_file $current_plan implement $branch
+            echo ""
+            echo "📝 Implement (TDD Red/Green)..."
 
-        set -l impl_prompt (__autoplan_interpolate_prompt \
-            (__autoplan_load_prompt "$prompts_path" implement) \
-            $current_plan $branch $test_cmd)
-
-        if test -z "$impl_prompt"
-            set impl_prompt (__autoplan_interpolate_prompt \
-                (cat "$HOME/.claude/skills/prepare-autoplan/references/implement-prompt.md") \
+            set -l impl_prompt (__autoplan_interpolate_prompt \
+                (__autoplan_load_prompt "$prompts_path" implement) \
                 $current_plan $branch $test_cmd)
-        end
 
-        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$impl_prompt"
-        if test $status -ne 0
-            echo "❌ Implement failed." >&2
-            return 1
+            if test -z "$impl_prompt"
+                set impl_prompt (__autoplan_interpolate_prompt \
+                    (cat "$HOME/.claude/skills/prepare-autoplan/references/implement-prompt.md") \
+                    $current_plan $branch $test_cmd)
+            end
+
+            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$impl_prompt"
+            if test $status -ne 0
+                echo "❌ Implement failed." >&2
+                return 1
+            end
         end
 
         # ===== TEST/FIX LOOP =====
-        set -l fix_attempt 0
+        if not __autoplan_check_skip test_fix
+            __autoplan_save_state $plan_file $current_plan test_fix $branch
+            set -l fix_attempt 0
 
-        while true
-            echo ""
-            echo "🧪 Running tests..."
+            while true
+                echo ""
+                echo "🧪 Running tests..."
 
-            if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
-                echo "✅ Tests pass."
-                break
-            else
-                set fix_attempt (math $fix_attempt + 1)
-                if test $fix_attempt -ge $max_fix_attempts
-                    echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
-                    echo "Test output: ./tmp/autoplan-test-output.txt" >&2
-                    return 1
-                end
+                if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
+                    echo "✅ Tests pass."
+                    break
+                else
+                    set fix_attempt (math $fix_attempt + 1)
+                    if test $fix_attempt -ge $max_fix_attempts
+                        echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
+                        echo "Test output: ./tmp/autoplan-test-output.txt" >&2
+                        return 1
+                    end
 
-                echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
+                    echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
 
-                set -l fix_prompt (__autoplan_interpolate_prompt \
-                    (__autoplan_load_prompt "$prompts_path" fix_test) \
-                    $current_plan $branch $test_cmd)
-
-                if test -z "$fix_prompt"
-                    set fix_prompt (__autoplan_interpolate_prompt \
-                        (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
+                    set -l fix_prompt (__autoplan_interpolate_prompt \
+                        (__autoplan_load_prompt "$prompts_path" fix_test) \
                         $current_plan $branch $test_cmd)
-                end
 
-                claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_prompt"
+                    if test -z "$fix_prompt"
+                        set fix_prompt (__autoplan_interpolate_prompt \
+                            (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
+                            $current_plan $branch $test_cmd)
+                    end
+
+                    claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_prompt"
+                end
             end
         end
 
         # ===== HARDEN =====
-        echo ""
-        echo "🔨 Harden..."
+        if not __autoplan_check_skip harden
+            __autoplan_save_state $plan_file $current_plan harden $branch
+            echo ""
+            echo "🔨 Harden..."
 
-        set -l harden_prompt (__autoplan_interpolate_prompt \
-            (__autoplan_load_prompt "$prompts_path" harden) \
-            $current_plan $branch $test_cmd)
-
-        if test -z "$harden_prompt"
-            set harden_prompt (__autoplan_interpolate_prompt \
-                (cat "$HOME/.claude/skills/prepare-autoplan/references/harden-prompt.md") \
+            set -l harden_prompt (__autoplan_interpolate_prompt \
+                (__autoplan_load_prompt "$prompts_path" harden) \
                 $current_plan $branch $test_cmd)
+
+            if test -z "$harden_prompt"
+                set harden_prompt (__autoplan_interpolate_prompt \
+                    (cat "$HOME/.claude/skills/prepare-autoplan/references/harden-prompt.md") \
+                    $current_plan $branch $test_cmd)
+            end
+
+            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$harden_prompt"
         end
 
-        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$harden_prompt"
-
         # ===== VERIFY/FIX LOOP =====
-        set -l verify_pass 0
+        if not __autoplan_check_skip verify_fix
+            __autoplan_save_state $plan_file $current_plan verify_fix $branch
+            set -l verify_pass 0
 
-        while true
-            set verify_pass (math $verify_pass + 1)
-            if test $verify_pass -gt $max_verify_passes
-                echo "❌ Verify still finding issues after $max_verify_passes passes." >&2
-                return 1
-            end
+            while true
+                set verify_pass (math $verify_pass + 1)
+                if test $verify_pass -gt $max_verify_passes
+                    echo "❌ Verify still finding issues after $max_verify_passes passes." >&2
+                    return 1
+                end
 
-            echo ""
-            echo "🔎 Verify (pass $verify_pass/$max_verify_passes)..."
+                echo ""
+                echo "🔎 Verify (pass $verify_pass/$max_verify_passes)..."
 
-            rm -f ./tmp/autoplan-verify-result.txt
+                rm -f ./tmp/autoplan-verify-result.txt
 
-            set -l verify_prompt (__autoplan_interpolate_prompt \
-                (__autoplan_load_prompt "$prompts_path" verify) \
-                $current_plan $branch $test_cmd)
-
-            if test -z "$verify_prompt"
-                set verify_prompt (__autoplan_interpolate_prompt \
-                    (cat "$HOME/.claude/skills/prepare-autoplan/references/verify-prompt.md") \
-                    $current_plan $branch $test_cmd)
-            end
-
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$verify_prompt"
-
-            if not test -f ./tmp/autoplan-verify-result.txt
-                echo "❌ Verify did not write sentinel file." >&2
-                return 1
-            end
-
-            if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
-                echo "✅ Verify passed."
-                break
-            else if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ISSUES_FOUND'
-                echo "⚠️  Verify found issues. Fixing..."
-
-                set -l fix_verify_prompt (__autoplan_interpolate_prompt \
-                    (__autoplan_load_prompt "$prompts_path" fix_verify) \
+                set -l verify_prompt (__autoplan_interpolate_prompt \
+                    (__autoplan_load_prompt "$prompts_path" verify) \
                     $current_plan $branch $test_cmd)
 
-                if test -z "$fix_verify_prompt"
-                    set fix_verify_prompt (__autoplan_interpolate_prompt \
-                        (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-verify-prompt.md") \
+                if test -z "$verify_prompt"
+                    set verify_prompt (__autoplan_interpolate_prompt \
+                        (cat "$HOME/.claude/skills/prepare-autoplan/references/verify-prompt.md") \
                         $current_plan $branch $test_cmd)
                 end
 
-                claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_verify_prompt"
+                command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$verify_prompt"
 
-                # Reset fix attempts and go back through test/fix loop
-                set fix_attempt 0
-                while true
-                    echo ""
-                    echo "🧪 Re-running tests after verify fix..."
-
-                    if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
-                        echo "✅ Tests pass."
-                        break
-                    else
-                        set fix_attempt (math $fix_attempt + 1)
-                        if test $fix_attempt -ge $max_fix_attempts
-                            echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
-                            return 1
-                        end
-
-                        echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
-
-                        set -l refix_prompt (__autoplan_interpolate_prompt \
-                            (__autoplan_load_prompt "$prompts_path" fix_test) \
-                            $current_plan $branch $test_cmd)
-
-                        if test -z "$refix_prompt"
-                            set refix_prompt (__autoplan_interpolate_prompt \
-                                (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
-                                $current_plan $branch $test_cmd)
-                        end
-
-                        claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $refix_prompt"
-                    end
+                if not test -f ./tmp/autoplan-verify-result.txt
+                    echo "❌ Verify did not write sentinel file." >&2
+                    return 1
                 end
-                # Continue verify loop
-            else
-                echo "❌ Verify did not write a recognized sentinel." >&2
-                return 1
+
+                if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
+                    echo "✅ Verify passed."
+                    break
+                else if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ISSUES_FOUND'
+                    echo "⚠️  Verify found issues. Fixing..."
+
+                    set -l fix_verify_prompt (__autoplan_interpolate_prompt \
+                        (__autoplan_load_prompt "$prompts_path" fix_verify) \
+                        $current_plan $branch $test_cmd)
+
+                    if test -z "$fix_verify_prompt"
+                        set fix_verify_prompt (__autoplan_interpolate_prompt \
+                            (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-verify-prompt.md") \
+                            $current_plan $branch $test_cmd)
+                    end
+
+                    claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_verify_prompt"
+
+                    # Reset fix attempts and go back through test/fix loop
+                    set fix_attempt 0
+                    while true
+                        echo ""
+                        echo "🧪 Re-running tests after verify fix..."
+
+                        if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
+                            echo "✅ Tests pass."
+                            break
+                        else
+                            set fix_attempt (math $fix_attempt + 1)
+                            if test $fix_attempt -ge $max_fix_attempts
+                                echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
+                                return 1
+                            end
+
+                            echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
+
+                            set -l refix_prompt (__autoplan_interpolate_prompt \
+                                (__autoplan_load_prompt "$prompts_path" fix_test) \
+                                $current_plan $branch $test_cmd)
+
+                            if test -z "$refix_prompt"
+                                set refix_prompt (__autoplan_interpolate_prompt \
+                                    (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
+                                    $current_plan $branch $test_cmd)
+                            end
+
+                            claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $refix_prompt"
+                        end
+                    end
+                    # Continue verify loop
+                else
+                    echo "❌ Verify did not write a recognized sentinel." >&2
+                    return 1
+                end
             end
         end
 
-        # Save next and prompts_path BEFORE commit deletes the plan file
+        # Save next plan path BEFORE commit (commit may delete the plan file)
         set -l next_plan (__autoplan_frontmatter $current_plan next)
 
         # ===== COMMIT =====
-        echo ""
-        echo "💾 Commit..."
+        if not __autoplan_check_skip commit
+            __autoplan_save_state $plan_file $current_plan commit $branch
+            echo ""
+            echo "💾 Commit..."
 
-        set -l commit_prompt (__autoplan_interpolate_prompt \
-            (cat "$HOME/.claude/skills/prepare-autoplan/references/commit-prompt.md") \
-            $current_plan $branch $test_cmd)
-        set commit_prompt (string replace -a -- '$PROMPTS_FILE' "$prompts_path" $commit_prompt)
-        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+            set -l commit_prompt (__autoplan_interpolate_prompt \
+                (cat "$HOME/.claude/skills/prepare-autoplan/references/commit-prompt.md") \
+                $current_plan $branch $test_cmd)
+            set commit_prompt (string replace -a -- '$PROMPTS_FILE' "$prompts_path" $commit_prompt)
+            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+        end
 
         # Follow linked list
         if test -n "$next_plan"
@@ -302,17 +353,21 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 return 1
             end
             set current_plan $next_plan
+            # Update state so --continue resumes at the next plan's gate
+            __autoplan_save_state $plan_file $current_plan gate $branch
         else
             break
         end
     end
 
     # ===== CHAIN REVIEW =====
-    echo ""
-    echo "🔍 Chain review..."
+    __autoplan_save_state $plan_file $current_plan chain_review $branch
+    if not __autoplan_check_skip chain_review
+        echo ""
+        echo "🔍 Chain review..."
 
-    set -l plan_dir (dirname $plan_file)
-    set -l review_prompt "Review the completed autoplan chain and clean up.
+        set -l plan_dir (dirname $plan_file)
+        set -l review_prompt "Review the completed autoplan chain and clean up.
 
 ## Step 1: Review commits
 Run: git log --oneline origin/main..$branch
@@ -327,31 +382,36 @@ If there are files to delete, stage and commit:
 ## Step 3: Summary
 Output a brief summary of what was completed and flag anything that looks incomplete."
 
-    command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opus "$review_prompt"
+        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opus "$review_prompt"
+    end
 
     # ===== PR =====
     if not set -q _flag_no_pr
-        echo ""
-        echo "🚀 Creating PR..."
+        __autoplan_save_state $plan_file $current_plan pr $branch
+        if not __autoplan_check_skip pr
+            echo ""
+            echo "🚀 Creating PR..."
 
-        rm -f ./tmp/autoplan-pr-body.txt
-        set -l pr_prompt (__autoplan_interpolate_prompt \
-            (cat "$HOME/.claude/skills/prepare-autoplan/references/pr-body-prompt.md") \
-            $current_plan $branch $test_cmd)
-        command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort low "$pr_prompt"
-        set -l pr_body (cat ./tmp/autoplan-pr-body.txt 2>/dev/null)
+            rm -f ./tmp/autoplan-pr-body.txt
+            set -l pr_prompt (__autoplan_interpolate_prompt \
+                (cat "$HOME/.claude/skills/prepare-autoplan/references/pr-body-prompt.md") \
+                $current_plan $branch $test_cmd)
+            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort low "$pr_prompt"
+            set -l pr_body (cat ./tmp/autoplan-pr-body.txt 2>/dev/null)
 
-        git push origin $branch
+            git push origin $branch
 
-        if gh pr view $branch >/dev/null 2>&1
-            echo "PR already exists for $branch."
-        else
-            gh pr create --title "$pr_title" --body "$pr_body"
+            if gh pr view $branch >/dev/null 2>&1
+                echo "PR already exists for $branch."
+            else
+                gh pr create --title "$pr_title" --body "$pr_body"
+            end
         end
     end
 
     # ===== CLEANUP =====
     rm -f ./tmp/autoplan-*
+    rm -f .autoplan-progress
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -407,4 +467,41 @@ function __autoplan_run_tests --argument-names test_cmd output_file --descriptio
         end
     end
     return 0
+end
+
+function __autoplan_save_state --argument-names root_plan plan phase branch
+    echo "root_plan=$root_plan" > .autoplan-progress
+    echo "plan=$plan" >> .autoplan-progress
+    echo "phase=$phase" >> .autoplan-progress
+    echo "branch=$branch" >> .autoplan-progress
+end
+
+function __autoplan_phase_index --argument-names phase
+    switch $phase
+        case gate;         echo 1
+        case implement;    echo 2
+        case test_fix;     echo 3
+        case harden;       echo 4
+        case verify_fix;   echo 5
+        case commit;       echo 6
+        case chain_review; echo 7
+        case pr;           echo 8
+        case '*';          echo 0
+    end
+end
+
+function __autoplan_check_skip --argument-names phase
+    # Returns 0 (true = skip) if this phase should be skipped
+    # Returns 1 (false = run) if this phase should execute
+    # Side effect: clears global skip_to_phase when the target phase is reached
+    if not set -q skip_to_phase
+        return 1  # No skip target; run the phase
+    end
+    if test (__autoplan_phase_index $phase) -lt (__autoplan_phase_index $skip_to_phase)
+        echo "⏭  Skipping $phase (resuming at $skip_to_phase)..."
+        return 0  # Skip this phase
+    end
+    # Reached or passed target — clear skip and run
+    set -eg skip_to_phase
+    return 1  # Run this phase
 end
