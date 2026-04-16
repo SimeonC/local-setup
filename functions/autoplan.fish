@@ -307,6 +307,28 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
     end
 
+    # ===== CHAIN REVIEW =====
+    echo ""
+    echo "🔍 Chain review..."
+
+    set -l plan_dir (dirname $plan_file)
+    set -l review_prompt "Review the completed autoplan chain and clean up.
+
+## Step 1: Review commits
+Run: git log --oneline origin/main..$branch
+Check each commit against the original plan scope to verify nothing was missed or left incomplete.
+
+## Step 2: Clean up leftover files
+Delete any remaining autoplan plan/prompts .md files in $plan_dir that were part of this chain.
+Do NOT delete files that aren't part of this autoplan chain.
+If there are files to delete, stage and commit:
+  🔥 Remove completed plan files
+
+## Step 3: Summary
+Output a brief summary of what was completed and flag anything that looks incomplete."
+
+    command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opus "$review_prompt"
+
     # ===== PR =====
     if not set -q _flag_no_pr
         echo ""

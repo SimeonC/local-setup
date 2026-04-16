@@ -52,6 +52,10 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 - **Always adhere to SOLID principles** (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion) when writing or modifying code.
 - **Always use `/tdd` skill** whenever a task involves code changes — run it before writing implementation code.
 
+## Pull Requests
+
+- After creating a PR with `gh pr create`, always immediately `open <pr-url>` to open it in the browser.
+
 ## Commits
 
 - Follow the repo's existing commit convention (check recent `git log` output).
