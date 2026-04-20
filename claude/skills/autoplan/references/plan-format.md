@@ -41,6 +41,11 @@ Bad:
 - Code looks correct
 - Auth works as expected
 
+### Out of Scope
+Explicit list of known gaps NOT handled by this plan, each with reason or deferral pointer.
+- <gap> — ignored because <reason>
+- <gap> — deferred to ./<slug>-followup.md
+
 ## Example
 
 ```markdown

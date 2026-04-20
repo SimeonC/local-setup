@@ -136,7 +136,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "🔍 Gate: Evaluating and fixing plan if needed..."
 
             rm -f ./tmp/autoplan-gate-output.txt
-            set -l gate_prompt_file "$HOME/.claude/skills/prepare-autoplan/references/gate-prompt.md"
+            set -l gate_prompt_file "$HOME/.claude/skills/autoplan/references/gate-prompt.md"
             set -l gate_prompt (cat $gate_prompt_file \
                 | string replace -a -- '$PLAN_FILE' "$current_plan" \
                 | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt')
@@ -166,7 +166,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
             if test -z "$impl_prompt"
                 set impl_prompt (__autoplan_interpolate_prompt \
-                    (cat "$HOME/.claude/skills/prepare-autoplan/references/implement-prompt.md") \
+                    (cat "$HOME/.claude/skills/autoplan/references/implement-prompt.md") \
                     $current_plan $branch $test_cmd)
             end
 
@@ -205,7 +205,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                     if test -z "$fix_prompt"
                         set fix_prompt (__autoplan_interpolate_prompt \
-                            (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
+                            (cat "$HOME/.claude/skills/autoplan/references/fix-test-prompt.md") \
                             $current_plan $branch $test_cmd)
                     end
 
@@ -226,7 +226,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
             if test -z "$harden_prompt"
                 set harden_prompt (__autoplan_interpolate_prompt \
-                    (cat "$HOME/.claude/skills/prepare-autoplan/references/harden-prompt.md") \
+                    (cat "$HOME/.claude/skills/autoplan/references/harden-prompt.md") \
                     $current_plan $branch $test_cmd)
             end
 
@@ -256,7 +256,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                 if test -z "$verify_prompt"
                     set verify_prompt (__autoplan_interpolate_prompt \
-                        (cat "$HOME/.claude/skills/prepare-autoplan/references/verify-prompt.md") \
+                        (cat "$HOME/.claude/skills/autoplan/references/verify-prompt.md") \
                         $current_plan $branch $test_cmd)
                 end
 
@@ -279,7 +279,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                     if test -z "$fix_verify_prompt"
                         set fix_verify_prompt (__autoplan_interpolate_prompt \
-                            (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-verify-prompt.md") \
+                            (cat "$HOME/.claude/skills/autoplan/references/fix-verify-prompt.md") \
                             $current_plan $branch $test_cmd)
                     end
 
@@ -309,7 +309,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                             if test -z "$refix_prompt"
                                 set refix_prompt (__autoplan_interpolate_prompt \
-                                    (cat "$HOME/.claude/skills/prepare-autoplan/references/fix-test-prompt.md") \
+                                    (cat "$HOME/.claude/skills/autoplan/references/fix-test-prompt.md") \
                                     $current_plan $branch $test_cmd)
                             end
 
@@ -334,7 +334,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "💾 Commit..."
 
             set -l commit_prompt (__autoplan_interpolate_prompt \
-                (cat "$HOME/.claude/skills/prepare-autoplan/references/commit-prompt.md") \
+                (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                 $current_plan $branch $test_cmd)
             set commit_prompt (string replace -a -- '$PROMPTS_FILE' "$prompts_path" $commit_prompt)
             command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
@@ -394,7 +394,7 @@ Output a brief summary of what was completed and flag anything that looks incomp
 
             rm -f ./tmp/autoplan-pr-body.txt
             set -l pr_prompt (__autoplan_interpolate_prompt \
-                (cat "$HOME/.claude/skills/prepare-autoplan/references/pr-body-prompt.md") \
+                (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
                 $current_plan $branch $test_cmd)
             command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort low "$pr_prompt"
             set -l pr_body (cat ./tmp/autoplan-pr-body.txt 2>/dev/null)

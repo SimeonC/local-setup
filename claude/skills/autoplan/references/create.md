@@ -1,11 +1,4 @@
----
-name: prepare-autoplan
-description: Prepare autoplan-ready plan files from a task description. Creates atomic plan files linked as a chain, plus a prompts file with domain-specific rules. Replaces /create-plan, /refine-plan, /split-plan. Use when preparing work for autoplan execution.
-user_invocable: true
-user_invocable_name: /prepare-autoplan
----
-
-Prepare autoplan-ready plan files: $ARGUMENTS
+# Create: New Autoplan Chain
 
 ## Step 1: Gather Info
 
