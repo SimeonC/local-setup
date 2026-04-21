@@ -1,5 +1,5 @@
 function autoplan --description "Iterative TDD loop driven by a linked list of markdown plan files"
-    argparse 'max-fix-attempts=' 'max-verify-passes=' 'no-pr' 'resume' 'continue' -- $argv
+    argparse 'max-fix-attempts=' 'max-verify-passes=' 'resume' 'continue' -- $argv
 
     if set -q _flag_continue
         if not test -f .autoplan-progress
@@ -7,7 +7,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             return 1
         end
     else if test (count $argv) -eq 0
-        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--no-pr] [--resume] [--continue]" >&2
+        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--resume] [--continue]" >&2
         return 1
     end
 
@@ -62,6 +62,11 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     set -l test_cmd (__autoplan_frontmatter $plan_file test_cmd)
     set -l pr_title (__autoplan_frontmatter $plan_file pr_title)
     set -l prompts_path (__autoplan_frontmatter $plan_file prompts)
+    set -l manual_test_file (__autoplan_frontmatter $plan_file manual_test)
+    if test -n "$manual_test_file" -a ! -f "$manual_test_file"
+        set -l plan_dir (dirname $plan_file)
+        set manual_test_file "$plan_dir/$manual_test_file"
+    end
 
     if test -z "$branch"
         set branch (__autoplan_frontmatter $plan_file branch)
@@ -71,15 +76,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         echo "Error: Plan file missing required frontmatter key: branch" >&2
         return 1
     end
-    if test -z "$test_cmd"
-        echo "Error: Plan file missing required frontmatter key: test_cmd" >&2
+    if test -z "$test_cmd" -a -z "$manual_test_file"
+        echo "Error: Plan file must have test_cmd, manual_test, or both." >&2
         return 1
     end
-    if test -z "$pr_title"
-        echo "Error: Plan file missing required frontmatter key: pr_title" >&2
-        return 1
-    end
-
     # Resolve prompts path relative to plan file directory
     if test -n "$prompts_path" -a ! -f "$prompts_path"
         set -l plan_dir (dirname $plan_file)
@@ -122,6 +122,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             if test ! -f "$prompts_path"
                 set -l plan_dir (dirname $current_plan)
                 set prompts_path "$plan_dir/$prompts_path"
+            end
+        end
+        set -l plan_manual_test (__autoplan_frontmatter $current_plan manual_test)
+        if test -n "$plan_manual_test"
+            set manual_test_file $plan_manual_test
+            if test ! -f "$manual_test_file"
+                set -l plan_dir (dirname $current_plan)
+                set manual_test_file "$plan_dir/$manual_test_file"
             end
         end
 
@@ -186,7 +194,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 echo ""
                 echo "🧪 Running tests..."
 
-                if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
+                if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file"
                     echo "✅ Tests pass."
                     break
                 else
@@ -291,7 +299,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
 
-                        if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt
+                        if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file"
                             echo "✅ Tests pass."
                             break
                         else
@@ -322,6 +330,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     return 1
                 end
             end
+        end
+
+        # Delete manual_test instructions file so commit picks up the deletion
+        if test -n "$manual_test_file" -a -f "$manual_test_file"
+            rm $manual_test_file
+            echo "🗑  Removed manual test instructions: $manual_test_file"
         end
 
         # Save next plan path BEFORE commit (commit may delete the plan file)
@@ -386,7 +400,7 @@ Output a brief summary of what was completed and flag anything that looks incomp
     end
 
     # ===== PR =====
-    if not set -q _flag_no_pr
+    if test -n "$pr_title"
         __autoplan_save_state $plan_file $current_plan pr $branch
         if not __autoplan_check_skip pr
             echo ""
@@ -407,6 +421,8 @@ Output a brief summary of what was completed and flag anything that looks incomp
                 gh pr create --title "$pr_title" --body "$pr_body"
             end
         end
+    else
+        echo "ℹ️  No pr_title — skipping PR."
     end
 
     # ===== CLEANUP =====
@@ -455,13 +471,20 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
         | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt'
 end
 
-function __autoplan_run_tests --argument-names test_cmd output_file --description "Run test command(s), splitting on && for progress output"
+function __autoplan_run_tests --argument-names test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test"
     echo -n >$output_file
     for cmd in (string split '&&' -- $test_cmd)
         set cmd (string trim $cmd)
         test -z "$cmd"; and continue
         echo "▶ $cmd"
         CI=true eval $cmd 2>&1 | tee -a $output_file
+        if test $pipestatus[1] -ne 0
+            return 1
+        end
+    end
+    if test -n "$manual_test_file"
+        echo "▶ manual_test $manual_test_file"
+        manual_test $manual_test_file 2>&1 | tee -a $output_file
         if test $pipestatus[1] -ne 0
             return 1
         end

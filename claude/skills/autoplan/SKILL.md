@@ -9,7 +9,7 @@ Autoplan: $ARGUMENTS
 
 ## Manual Verification
 
-For flows that can't be auto-tested, create a companion `.md` file (e.g. `plan-name.manual.md`) with step-by-step instructions, then put `manual_test <path>` as the **last** command in `test_cmd` (chain with `&&`). The harness opens the file's content as a pre-filled editor buffer; the tester closes it empty to pass, or types failure details to fail (failures are tagged `MANUAL TEST FAILURE` and re-enter `fix_test`).
+For flows that can't be auto-tested, create a companion `.md` file (e.g. `plan-name.manual.md`) with step-by-step instructions and set `manual_test: <path>` in the plan frontmatter. The harness runs it after `test_cmd` passes, opens the file's content as a pre-filled editor buffer; the tester closes it empty to pass, or types failure details to fail (failures are tagged `MANUAL TEST FAILURE` and re-enter `fix_test`). The instructions file is automatically deleted before the commit.
 
 ## Route
 1. If $ARGUMENTS empty → AskUserQuestion: "Create new plan" or "Refine existing" (if Refine, also ask for the plan file path or folder).

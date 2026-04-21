@@ -26,7 +26,7 @@ These rules are injected into every Claude invocation by `autoplan.fish` — do 
 
 A prompts file must contain all 5 sections, each introduced by `## <section-name>`.
 
-For plans with flows that aren't auto-testable—UI walkthroughs, approval workflows, manual verification steps—create a companion `.md` file with instructions and use `manual_test <path>` in the plan's `test_cmd`. The fix loops (`fix_test` and `fix_verify`) handle `MANUAL TEST FAILURE` markers the same way they handle automated test failures.
+For plans with flows that aren't auto-testable—UI walkthroughs, approval workflows, manual verification steps—create a companion `.md` file with instructions and set `manual_test: <path>` in the plan's frontmatter. The fix loops (`fix_test` and `fix_verify`) handle `MANUAL TEST FAILURE` markers the same way they handle automated test failures.
 
 ### `## implement`
 
@@ -99,7 +99,6 @@ Template:
 Review all uncommitted changes. Fix: duplication, dead code, missing coverage.
 Re-run tests after each change. Context: $PLAN_FILE.
 Do NOT add new features or expand scope.
-If test_cmd references any manual_test instruction files (e.g. `plan-name.manual.md`), delete them and commit the deletion.
 ```
 
 ## Example (playwright-migrate context)
@@ -145,5 +144,4 @@ If ANY fail: write ISSUES_FOUND on line 1 of $VERIFY_LOG, numbered issues below.
 Review all uncommitted changes. Fix: duplication, dead code, missing coverage.
 Re-run tests after each change. Context: $PLAN_FILE.
 Do NOT add new features or expand scope.
-If test_cmd references any manual_test instruction files (e.g. `plan-name.manual.md`), delete them and commit the deletion.
 ```

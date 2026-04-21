@@ -5,7 +5,8 @@
 ```yaml
 ---
 branch: feat/...           # required — git branch name
-test_cmd: npm run test:ai   # required — command(s) to run tests; can chain manual_test
+test_cmd: npm run test:ai   # required — command(s) to run tests
+manual_test: ./plan-name.manual.md  # optional — path to manual test instructions file
 pr_title: "..."             # optional — PR title string; omit to skip PR creation (commits only)
 prompts: ./<slug>-prompts.md # required — path to prompts file
 next: ./<slug>-2.md         # optional — next plan in chain
@@ -14,11 +15,11 @@ next: ./<slug>-2.md         # optional — next plan in chain
 
 ### test_cmd: Automated and Manual Verification
 
-`test_cmd` can contain automated test commands, `manual_test`, or both:
+`test_cmd` runs automated tests. For flows that can't be auto-tested, set `manual_test` to a path pointing to a companion instructions `.md` file — the harness runs it after `test_cmd` passes and deletes the file before committing.
 
 - **Automated only**: `test_cmd: npm run test:ai`
-- **Chained**: `test_cmd: npm run test:ai && manual_test ./auth-refresh.manual.md`
-- **Manual only**: `test_cmd: manual_test ./auth-refresh.manual.md`
+- **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
+- **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
 All fields except `next` and `pr_title` are required. Paths in `prompts` and `next` are resolved relative to the plan file's directory.
 

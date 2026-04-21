@@ -14,7 +14,7 @@ Use AskUserQuestion (up to 2 rounds, max 4 questions each).
 - Task description (what needs to be built, high level)
 - Domain-specific conventions for implementation (imports, patterns, file locations)
 - Domain-specific verification checks (what to audit beyond "tests pass")
-- Does this plan have flows that can't (or shouldn't) be auto-tested? If yes, create a companion `.md` file with instructions, then chain `manual_test <path>` into `test_cmd` or make it the only command for fully-manual plans.
+- Does this plan have flows that can't (or shouldn't) be auto-tested? If yes, create a companion `.md` file with step-by-step instructions and set `manual_test: <path>` in frontmatter. The harness runs it after `test_cmd` passes and deletes the file on completion.
 - Any "never do" rules for fix steps (e.g. "never skip tests", "never weaken assertions")
 - How do you run a single failing test file? (e.g. `npx nx run myapp:playwright -- <file>` or `npm run test:ai -- --testPathPattern=<file>`)
 
