@@ -5,14 +5,22 @@
 ```yaml
 ---
 branch: feat/...           # required — git branch name
-test_cmd: npm run test:ai   # required — command to run tests
-pr_title: "..."             # required — PR title string
+test_cmd: npm run test:ai   # required — command(s) to run tests; can chain manual_test
+pr_title: "..."             # optional — PR title string; omit to skip PR creation (commits only)
 prompts: ./<slug>-prompts.md # required — path to prompts file
 next: ./<slug>-2.md         # optional — next plan in chain
 ---
 ```
 
-All fields except `next` are required. Paths in `prompts` and `next` are resolved relative to the plan file's directory.
+### test_cmd: Automated and Manual Verification
+
+`test_cmd` can contain automated test commands, `manual_test`, or both:
+
+- **Automated only**: `test_cmd: npm run test:ai`
+- **Chained**: `test_cmd: npm run test:ai && manual_test ./auth-refresh.manual.md`
+- **Manual only**: `test_cmd: manual_test ./auth-refresh.manual.md`
+
+All fields except `next` and `pr_title` are required. Paths in `prompts` and `next` are resolved relative to the plan file's directory.
 
 ## Body Sections
 

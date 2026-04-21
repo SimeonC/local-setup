@@ -14,6 +14,7 @@ Use AskUserQuestion (up to 2 rounds, max 4 questions each).
 - Task description (what needs to be built, high level)
 - Domain-specific conventions for implementation (imports, patterns, file locations)
 - Domain-specific verification checks (what to audit beyond "tests pass")
+- Does this plan have flows that can't (or shouldn't) be auto-tested? If yes, create a companion `.md` file with instructions, then chain `manual_test <path>` into `test_cmd` or make it the only command for fully-manual plans.
 - Any "never do" rules for fix steps (e.g. "never skip tests", "never weaken assertions")
 - How do you run a single failing test file? (e.g. `npx nx run myapp:playwright -- <file>` or `npm run test:ai -- --testPathPattern=<file>`)
 
@@ -61,7 +62,7 @@ For the plan (and each plan if split), check ALL of:
 
 1. **Single session**: Could be implemented in ~one Claude session (~15-30 min of work)
 2. **Concrete scope**: Names specific files, functions, or interfaces — NOT "refactor X" or "improve Y"
-3. **Automatable verification**: Commands that pass/fail — NOT "looks correct"
+3. **Automatable verification**: Commands or `manual_test` that pass/fail — NOT "looks correct". `manual_test` satisfies this criterion for flows that aren't auto-testable.
 4. **No internal ordering**: If step A must precede step B, they must be separate plans
 
 If all pass, the plan is atomic. If any fail, proceed to Step 4.
@@ -72,7 +73,7 @@ If a plan is not atomic, split into a linked chain:
 
 - Name sub-plans: `<slug>-1.md`, `<slug>-2.md`, etc.
 - Each sub-plan has own frontmatter:
-  - Inherits `branch`, `test_cmd`, `pr_title`, `prompts` from first plan (unless overridden)
+  - Inherits `branch`, `test_cmd`, `prompts` from first plan (unless overridden); `pr_title` is optional
   - Each sub-plan (except last) has `next: ./<slug>-N+1.md`
 - Each sub-plan has its own **Scope** and **Verification** scoped to just that unit's work
 
