@@ -5,9 +5,9 @@ set -gx RAILS_ENV development
 set -gx TEST_ELASTICSEARCH true
 set -gx PNPM_HOME "$HOME/Library/pnpm"
 set -gx DENO_DIR "$HOME/Library/Caches/deno"
-set -gx EDITOR "cursor --wait"
-set -gx VISUAL "cursor --wait"
-set -gx VIEWER "cursor"
+set -gx EDITOR "zed --wait"
+set -gx VISUAL "zed --wait"
+set -gx VIEWER "zed"
 
 set -gx CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS "1"
 
@@ -38,8 +38,8 @@ set -gx LIBRARY_PATH /opt/homebrew/lib
 
 set -U fish_complete_path $fish_complete_path ~/.config/fish/completions
 
-source ~/.config/fish/functions/secure/authorize_npm.fish
-source ~/.config/fish/functions/secure/secure_env.fish
+source ~/.config/fish/functions/secure/authorize_npm.fish; or true
+source ~/.config/fish/functions/secure/secure_env.fish; or true
 
 # Direnv (usually fast)
 direnv hook fish | source
@@ -67,6 +67,7 @@ alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w 
 alias record "replayio record"
 alias dclaude danger_claude
 alias ddclaude danger_danger_claude
+alias pclaude print_claude
 
 function npm --wraps npm
     _npm_with_auth_refresh npm $argv

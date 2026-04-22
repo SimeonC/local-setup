@@ -12,4 +12,4 @@ mcp-remote
 @sveltejs/mcp
 css-mcp
 @playwright/cli
-
+@khanacademy/format-claude-stream

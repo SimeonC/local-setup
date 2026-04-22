@@ -1,5 +1,7 @@
 Tests are failing. Output at $TEST_LOG.
 
+If `$TEST_LOG` contains `MANUAL TEST FAILURE`, the lines below that banner are a human bug report — treat as the authoritative failure description.
+
 Follow TDD: red -> green -> commit.
 
 ## Steps

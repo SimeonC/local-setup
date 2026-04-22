@@ -14,8 +14,10 @@ Check ALL of the following. Every criterion must pass for READY.
 
 The plan must have YAML frontmatter with these keys:
 - `branch` — git branch name
-- `test_cmd` — shell command to run tests
-- `pr_title` — PR title string
+- `test_cmd` and/or `manual_test` — at least one must be present:
+  - `test_cmd` — shell command to run automated tests
+  - `manual_test` — path to a manual test instruction file
+- `pr_title` — optional, PR title string; omit to skip PR creation
 - `prompts` — relative path to a prompts file that exists on disk
 
 ### 2. Concrete file paths
@@ -27,10 +29,10 @@ Fail: "Improve auth handling"
 
 ### 3. Testable acceptance criteria
 
-The Verification section must list **automatable commands that pass or fail**. Not subjective checks like "looks correct" or "works as expected".
+The plan must have verification — either in the Verification section (automatable commands) or via `test_cmd`/`manual_test` in frontmatter. Not subjective checks like "looks correct" or "works as expected".
 
-Pass: "`npm run test:ai -- --testPathPattern=auth`"
-Fail: "Auth works as expected"
+Pass: `test_cmd: "npm run test:ai -- --testPathPattern=auth"` or `manual_test: ./auth-refresh.manual.md`
+Fail: "Auth works as expected" or neither `test_cmd` nor `manual_test` present with no Verification section
 
 ### 4. No ambiguous decisions
 

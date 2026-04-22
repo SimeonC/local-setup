@@ -61,7 +61,7 @@ Output a findings table:
 
 | # | Plan | Category | Issue | Severity |
 |---|------|----------|-------|----------|
-| 1 | slug.md | Atomicity | ... | High/Med/Low |
+| 1 | slug-1.md | Atomicity | ... | High/Med/Low |
 
 Then use AskUserQuestion in batches of ≤4 questions, offering **Fix / Ignore / Defer** per issue.
 Apply the chosen action:
@@ -77,4 +77,4 @@ Re-run all checks (Steps 2–6) after applying fixes. Repeat until no issues rem
 
 | Plan | Chain OK? | Atomic? | Prompts OK? | Gaps Resolved? | Status |
 |------|-----------|---------|-------------|----------------|--------|
-| slug.md | Yes/No | Yes/No | Yes/No | Yes/No | Ready / Needs Work |
+| slug-1.md | Yes/No | Yes/No | Yes/No | Yes/No | Ready / Needs Work |

@@ -19,7 +19,12 @@ function manual_test --description "Autoplan: pause for human tester via editor;
         echo ""
     end > $file
 
-    set -l editor $GIT_EDITOR
+    # Claude Code injects GIT_EDITOR=true, which would silently auto-pass.
+    # When CLAUDECODE is set, skip GIT_EDITOR and force a real editor.
+    set -l editor
+    if test "$CLAUDECODE" != 1
+        set editor $GIT_EDITOR
+    end
     test -z "$editor"; and set editor $VISUAL
     test -z "$editor"; and set editor $EDITOR
     test -z "$editor"; and set editor vi

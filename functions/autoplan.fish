@@ -63,9 +63,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     set -l pr_title (__autoplan_frontmatter $plan_file pr_title)
     set -l prompts_path (__autoplan_frontmatter $plan_file prompts)
     set -l manual_test_file (__autoplan_frontmatter $plan_file manual_test)
-    if test -n "$manual_test_file" -a ! -f "$manual_test_file"
-        set -l plan_dir (dirname $plan_file)
-        set manual_test_file "$plan_dir/$manual_test_file"
+    if test -n "$manual_test_file"
+        if not string match -q '/*' $manual_test_file
+            set manual_test_file (dirname $plan_file)/$manual_test_file
+        end
+        if not test -f "$manual_test_file"
+            echo "Error: manual_test file not found: $manual_test_file" >&2
+            return 1
+        end
     end
 
     if test -z "$branch"
@@ -80,10 +85,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         echo "Error: Plan file must have test_cmd, manual_test, or both." >&2
         return 1
     end
-    # Resolve prompts path relative to plan file directory
-    if test -n "$prompts_path" -a ! -f "$prompts_path"
-        set -l plan_dir (dirname $plan_file)
-        set prompts_path "$plan_dir/$prompts_path"
+    if test -n "$prompts_path"
+        if not string match -q '/*' $prompts_path
+            set prompts_path (dirname $plan_file)/$prompts_path
+        end
     end
 
     if not set -q _flag_resume; and not set -q _flag_continue
@@ -118,18 +123,18 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
         set -l plan_prompts (__autoplan_frontmatter $current_plan prompts)
         if test -n "$plan_prompts"
-            set prompts_path $plan_prompts
-            if test ! -f "$prompts_path"
-                set -l plan_dir (dirname $current_plan)
-                set prompts_path "$plan_dir/$prompts_path"
+            if not string match -q '/*' $plan_prompts
+                set prompts_path (dirname $current_plan)/$plan_prompts
+            else
+                set prompts_path $plan_prompts
             end
         end
         set -l plan_manual_test (__autoplan_frontmatter $current_plan manual_test)
         if test -n "$plan_manual_test"
-            set manual_test_file $plan_manual_test
-            if test ! -f "$manual_test_file"
-                set -l plan_dir (dirname $current_plan)
-                set manual_test_file "$plan_dir/$manual_test_file"
+            if not string match -q '/*' $plan_manual_test
+                set manual_test_file (dirname $current_plan)/$plan_manual_test
+            else
+                set manual_test_file $plan_manual_test
             end
         end
 

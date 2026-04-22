@@ -56,6 +56,10 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 - After creating a PR with `gh pr create`, always immediately `open <pr-url>` to open it in the browser.
 
+## Git Stash Safety (CRITICAL)
+
+- **NEVER delete a stash if it fails to restore.** If `git stash pop` or `git stash apply` fails, STOP immediately and prompt the user to resolve the conflict manually. Do NOT attempt to drop, delete, or overwrite the stash — it likely contains custom user changes that would be permanently lost. This rule applies to all agents; no agent may resolve a stash conflict autonomously.
+
 ## Commits
 
 - Follow the repo's existing commit convention (check recent `git log` output).

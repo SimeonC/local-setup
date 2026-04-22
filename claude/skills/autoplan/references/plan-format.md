@@ -21,7 +21,7 @@ next: ./<slug>-2.md         # optional — next plan in chain
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
 - **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `next` and `pr_title` are required. Paths in `prompts` and `next` are resolved relative to the plan file's directory.
+All fields except `next` and `pr_title` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory.
 
 ## Body Sections
 
@@ -53,9 +53,11 @@ Bad:
 ### Out of Scope
 Explicit list of known gaps NOT handled by this plan, each with reason or deferral pointer.
 - <gap> — ignored because <reason>
-- <gap> — deferred to ./<slug>-followup.md
+- <gap> — deferred to ./<slug>-N.md
 
 ## Example
+
+First plan file (`auth-refresh-1.md`):
 
 ```markdown
 ---

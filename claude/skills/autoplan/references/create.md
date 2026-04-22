@@ -25,7 +25,7 @@ Skip questions where `$ARGUMENTS` already provides the answer.
 ## Step 2: Generate Plan + Prompts Files
 
 Create two files in the chosen directory:
-- `<slug>.md` — the plan file
+- `<slug>-1.md` — the plan file (always name the first plan with `-1` suffix, even for single-plan chains)
 - `<slug>-prompts.md` — the prompts file
 
 See [plan-format.md](references/plan-format.md) and [prompts-format.md](references/prompts-format.md) for format specs.
@@ -102,7 +102,7 @@ Output a markdown table:
 
 | Plan | Atomic? | Verification Specific? | Prompts Complete? | Status |
 |------|---------|----------------------|-------------------|--------|
-| `<slug>.md` | Yes/No | Yes/No | Yes/No | Ready / Needs Work |
+| `<slug>-1.md` | Yes/No | Yes/No | Yes/No | Ready / Needs Work |
 
 ## Step 8: Iterate
 
