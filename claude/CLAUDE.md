@@ -15,37 +15,22 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 - Prefer `*:ai` versions of package.json scripts when available (e.g. `npm run lint:ai` not `npm run lint`).
 - Run tests via project runners (e.g. NX), not directly via tool CLIs — runners set up necessary env vars.
 
-## Agent Delegation & Token Budget
-- **Always start a team** at the beginning of every conversation using `TeamCreate`. You are the Team Lead running on Opus — reserve yourself for orchestration, planning, architectural decisions, and synthesis only.
-- **Max 3–4 concurrent teammates.** Queue remaining tasks and launch them as slots free up rather than spawning all at once.
-- Spawn teammates (not ad-hoc subagents) for ALL work using `Agent` with `team_name`.
-- The `model` param accepts tier names (e.g. `"haiku"`, `"default"`, `"best"`). Pick the cheapest tier that fits the task's reasoning demands:
-  - **Cheapest/fastest** (`"haiku"`): code search, grep/glob, reading files, running scripts, simple edits, committing, research/doc lookup.
-  - **Mid-tier** (`"default"`): code editing, refactoring, non-trivial test analysis, writing new code.
-  - **Reasoning-heavy** (`"best"`): complex architectural decisions, multi-file refactors with tricky logic. Rarely needed for teammates.
-- Rule of thumb: if the task is mechanical or has a clear spec, use `"haiku"`. If it requires judgement or creativity, step up.
-- Never do extensive searching or file reading directly as Team Lead — assign it to a teammate.
-- Create tasks with `TaskCreate` and assign them to teammates. Track all work through the shared task list.
+## Agent Delegation
 
-### Teammate Lifecycle (CRITICAL)
- - **Dismiss teammates immediately when their task completes.** Do not let finished teammates idle. The moment a teammate reports completion
- and you have confirmed their output, dismiss them. Only keep a teammate alive if it has a concrete pending follow-up task.
- - **How to dismiss**: Send a shutdown_request via SendMessage with the exact format:
-   SendMessage(to: "teammate-name", message: {type: "shutdown_request", reason: "brief reason"})
- Do NOT just send a friendly "you're done" message — that doesn't terminate the process. The shutdown_request actually shuts down the tmux
- session.
- - **Orchestration loop — follow this after every teammate launch:**
-    1. Monitor for the next teammate completion.
-    2. Review their output and mark the task done with `TaskUpdate(status: "completed")`.
-    3. Dismiss that teammate **immediately** with shutdown_request (see above).
-    4. If the completion unblocks a queued task, spawn a new teammate for it (respecting the concurrency cap).
-    5. Repeat until all tasks are done.
- - **Never batch dismissals.** Dismiss one-by-one as each teammate finishes — do not wait until all teammates are done.
- - **Always clean up before ending the conversation:**
-    1. Send shutdown_request to any remaining active teammates
-    2. Verify no teammates remain by checking TaskList
-    3. Call `TeamDelete` to clean up team and task directories
- - This is a safety net, not the primary cleanup mechanism — most teammates should already be dismissed by this point.
+- **Default: work directly.** Do not auto-create a team. Use `Agent` (one-shot subagents) or direct tools as appropriate.
+- **Use a team only when** the task has multiple independent, context-heavy workstreams that benefit from parallelism and isolation — e.g. multi-repo refactors, simultaneous research + implementation streams, 3+ tasks with little cross-dependency. If streams need to share context or hand results back and forth tightly, skip the team.
+- **Ad-hoc subagents are fine** for delegated search/research/isolated edits without a team.
+- **Model tier selection** (applies to both teammates and ad-hoc agents) — pick cheapest tier that fits:
+  - `"haiku"`: code search, grep/glob, reading files, running scripts, simple edits, research/doc lookup.
+  - `"default"`: code editing, refactoring, non-trivial test analysis, writing new code.
+  - `"best"`: complex architectural decisions, tricky multi-file refactors. Rare.
+
+### Teammate Lifecycle (only relevant if a team is started)
+
+- Dismiss teammates immediately on task completion via `SendMessage(to: "name", message: {type: "shutdown_request", reason: "..."})`. A friendly "you're done" does not terminate the tmux session.
+- Orchestration loop: monitor → review → `TaskUpdate(status:"completed")` → dismiss → spawn next queued (cap 3–4 concurrent) → repeat.
+- Never batch dismissals.
+- Before ending conversation: shutdown remaining teammates, verify via `TaskList`, then `TeamDelete`.
 
 ## Code Quality
 
