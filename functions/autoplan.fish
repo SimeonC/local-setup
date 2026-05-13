@@ -108,11 +108,16 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
     set -l base_system_prompt "## Autoplan Global Rules
 - Write any temporary context or source-dump files to ./tmp/ with an autoplan- prefix (e.g. ./tmp/autoplan-context.txt). Never write to /tmp/ (global) or the project root.
-- Do NOT commit — the pipeline handles commits separately.
-- Do NOT push to remote or open a PR — the pipeline handles that.
 - Do NOT weaken, skip, disable, or remove tests to fix failures — fix the implementation instead.
 - Follow SOLID principles.
 - Follow existing codebase patterns and conventions — match naming, file structure, and idioms already in use."
+
+    set -l worker_system_prompt "$base_system_prompt
+
+## Worker stage restrictions (do NOT bypass)
+- Do NOT run \`git commit\`, \`git commit --amend\`, \`git add\` followed by commit, or any other commit-creating command. The pipeline has a dedicated commit step that runs separately.
+- Do NOT run \`git push\`, \`gh pr create\`, or any command that publishes changes.
+- Do NOT stash, reset, revert, or otherwise discard working-tree changes — leave the working tree intact for the next pipeline step."
 
     # ===== MAIN LOOP (linked list traversal) =====
     while true
@@ -153,7 +158,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             set -l gate_prompt (cat $gate_prompt_file \
                 | string replace -a -- '$PLAN_FILE' "$current_plan" \
                 | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt')
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$gate_prompt"
+            command claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" --model sonnet --effort medium "$gate_prompt"
             set -l gate_output (cat ./tmp/autoplan-gate-output.txt 2>/dev/null)
 
             if string match -q -- "*CANNOT_FIX*" $gate_output
@@ -183,7 +188,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     $current_plan $branch $test_cmd)
             end
 
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$impl_prompt"
+            command claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" --model sonnet --effort high "$impl_prompt"
             if test $status -ne 0
                 echo "❌ Implement failed." >&2
                 return 1
@@ -222,7 +227,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                             $current_plan $branch $test_cmd)
                     end
 
-                    claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_prompt"
+                    claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" "/plan $fix_prompt"
                 end
             end
         end
@@ -243,7 +248,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     $current_plan $branch $test_cmd)
             end
 
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort high "$harden_prompt"
+            command claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" --model sonnet --effort high "$harden_prompt"
         end
 
         # ===== VERIFY/FIX LOOP =====
@@ -273,7 +278,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         $current_plan $branch $test_cmd)
                 end
 
-                command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$verify_prompt"
+                command claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" --model sonnet --effort medium "$verify_prompt"
 
                 if not test -f ./tmp/autoplan-verify-result.txt
                     echo "❌ Verify did not write sentinel file." >&2
@@ -296,7 +301,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                             $current_plan $branch $test_cmd)
                     end
 
-                    claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $fix_verify_prompt"
+                    claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" "/plan $fix_verify_prompt"
 
                     # Reset fix attempts and go back through test/fix loop
                     set fix_attempt 0
@@ -326,7 +331,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                                     $current_plan $branch $test_cmd)
                             end
 
-                            claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" "/plan $refix_prompt"
+                            claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" "/plan $refix_prompt"
                         end
                     end
                     # Continue verify loop
