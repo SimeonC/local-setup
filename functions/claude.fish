@@ -18,14 +18,22 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
     if not set -q TMUX
         # Not in tmux — create a detached session, send claude into it, attach
         set -l sess_name "claude-$fish_pid"
-        tmux new-session -d -s $sess_name -x (tput cols) -y (tput lines)
+        # Write args to a temp script — avoids string escaping issues
+        set -l tmpscript (mktemp /tmp/.claude_XXXXXX.fish)
+        echo "command claude" (string escape -- $claude_args) > $tmpscript
+        # Pass command directly to new-session (not send-keys) so it's never typed
+        # into an interactive shell and never recorded in history.
+        # fish --private disables history for the session; exec fish hands back
+        # a normal interactive shell after claude exits.
+        tmux new-session -d -s $sess_name -x (tput cols) -y (tput lines) \
+            fish --private -c "source $tmpscript; rm $tmpscript; exec fish"
         tmux set-option -wt $sess_name automatic-rename off
         tmux rename-window -t $sess_name "$short_cwd"
         tmux set-option -g set-titles on 2>/dev/null
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
-        set -l escaped_args (string join " " -- (string escape -- $claude_args))
-        tmux send-keys -t $sess_name "command claude $escaped_args" Enter
         tmux attach-session -t $sess_name
+        # Clean up any entries Claude Code wrote directly to the history file
+        builtin history delete --prefix "command claude"
     else
         # Already in tmux — rename current window and run directly
         tmux set-option -w automatic-rename off
@@ -33,5 +41,6 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux set-option -g set-titles on 2>/dev/null
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
         command claude $claude_args
+        builtin history delete --prefix "command claude"
     end
 end

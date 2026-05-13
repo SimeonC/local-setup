@@ -1,8 +1,12 @@
-Tests are failing. Output at $TEST_LOG.
+Tests failed. Output at $TEST_LOG.
 
-If `$TEST_LOG` contains `MANUAL TEST FAILURE`, the lines below that banner are a human bug report — treat as the authoritative failure description.
+The log may contain up to two labeled sections:
+- `# Auto Tests` — automated suite output (if $TEST_CMD ran).
+- `# Manual Test Output` — human tester's report; a `MANUAL TEST FAILURE` banner followed by their freeform failure description is the authoritative description of what went wrong.
 
-Follow TDD: red -> green -> commit.
+Read whichever sections are present. Fix the implementation/template so both pass on the next run.
+
+Follow TDD: red → green → re-run.
 
 ## Steps
 
@@ -10,10 +14,12 @@ Follow TDD: red -> green -> commit.
 2. Identify the root cause of each failure. Is it a missing implementation, wrong return value, incorrect wiring, or a test environment issue?
 3. Fix the implementation to make failing tests pass. Apply the simplest correct fix.
 4. Re-run the full test suite to confirm all tests pass and no regressions were introduced.
-5. Commit the fixes with a descriptive gitmoji message.
 
 ## Rules
 
+- Do NOT weaken, skip, disable, or remove tests.
+- Do NOT modify manual test instruction files — they are the spec.
 - Check for compile-time or lint warnings that could block CI.
-- Verify that new code is properly wired into existing call chains (e.g., new functions are actually called, new modules are imported).
+- Verify new code is wired into existing call chains.
 - If a fix touches shared code, check callers for unintended side effects.
+- Do NOT commit — pipeline handles commits.

@@ -7,6 +7,7 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
 - Use the AskUserQuestion tool to resolve unresolved questions before finalizing the plan.
+- Tests, linters, typecheckers, and build commands are non-destructive — run them in plan mode to verify errors without asking. Caveat: if a project's test/build command mutates shared state (e.g. shared dev DB, external API writes), treat it as destructive.
 
 ## Command Output
 
@@ -17,20 +18,21 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 ## Agent Delegation
 
-- **Default: work directly.** Do not auto-create a team. Use `Agent` (one-shot subagents) or direct tools as appropriate.
-- **Use a team only when** the task has multiple independent, context-heavy workstreams that benefit from parallelism and isolation — e.g. multi-repo refactors, simultaneous research + implementation streams, 3+ tasks with little cross-dependency. If streams need to share context or hand results back and forth tightly, skip the team.
-- **Ad-hoc subagents are fine** for delegated search/research/isolated edits without a team.
-- **Model tier selection** (applies to both teammates and ad-hoc agents) — pick cheapest tier that fits:
-  - `"haiku"`: code search, grep/glob, reading files, running scripts, simple edits, research/doc lookup.
-  - `"default"`: code editing, refactoring, non-trivial test analysis, writing new code.
+- **Always use Explore subagents for codebase exploration / research / search.** Don't grep or read widely as the lead — delegate.
+- **Self-contained implementation work** can be delegated to an `Agent` (or a team for multi-stream work). A "self-contained" task has clear inputs, scoped file set, and a single deliverable.
+- **Single-task orientation — CRITICAL.** Each agent/team gets ONE task with explicit scope. An implementation agent implements; it does NOT also run the full test suite, lint the repo, or touch unrelated areas. Verification, broad testing, and cross-cutting checks are separate tasks (separate agents, or done by the lead).
+- **Teams only when** ≥3 independent, context-heavy workstreams benefit from parallelism + isolation (multi-repo refactors, parallel research + impl streams). If streams need tight back-and-forth, skip the team.
+- **Model tier** — cheapest fit:
+  - `"haiku"`: search, reads, scripts, simple edits, doc lookup.
+  - `"default"`: code editing, refactoring, writing new code, non-trivial test analysis.
   - `"best"`: complex architectural decisions, tricky multi-file refactors. Rare.
 
-### Teammate Lifecycle (only relevant if a team is started)
+### Teammate Lifecycle (only if a team is started)
 
-- Dismiss teammates immediately on task completion via `SendMessage(to: "name", message: {type: "shutdown_request", reason: "..."})`. A friendly "you're done" does not terminate the tmux session.
-- Orchestration loop: monitor → review → `TaskUpdate(status:"completed")` → dismiss → spawn next queued (cap 3–4 concurrent) → repeat.
+- Dismiss on task completion via `SendMessage(to: "name", message: {type: "shutdown_request", reason: "..."})`. Friendly "you're done" does NOT terminate tmux.
+- Loop: monitor → review → `TaskUpdate(status:"completed")` → dismiss → spawn next queued (cap 3–4) → repeat.
 - Never batch dismissals.
-- Before ending conversation: shutdown remaining teammates, verify via `TaskList`, then `TeamDelete`.
+- Before ending conversation: shutdown remaining, verify via `TaskList`, then `TeamDelete`.
 
 ## Code Quality
 
@@ -49,3 +51,4 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 - Follow the repo's existing commit convention (check recent `git log` output).
 - If no convention exists, use gitmoji style (e.g. `🐛 Fix race condition in session cleanup`).
+- **Always delegate committing to a Haiku subagent.** Pass it the diff, recent log, and commit convention. The subagent stages all files and creates the commit.

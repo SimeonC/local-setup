@@ -36,7 +36,9 @@ set -gx PATH ./node_modules/.bin $PATH
 set -gx CPATH /opt/homebrew/include
 set -gx LIBRARY_PATH /opt/homebrew/lib
 
-set -U fish_complete_path $fish_complete_path ~/.config/fish/completions
+if not contains ~/.config/fish/completions $fish_complete_path
+    set -gx fish_complete_path $fish_complete_path ~/.config/fish/completions
+end
 
 source ~/.config/fish/functions/secure/authorize_npm.fish; or true
 source ~/.config/fish/functions/secure/secure_env.fish; or true

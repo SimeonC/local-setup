@@ -478,17 +478,24 @@ end
 
 function __autoplan_run_tests --argument-names test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test"
     echo -n >$output_file
-    for cmd in (string split '&&' -- $test_cmd)
-        set cmd (string trim $cmd)
-        test -z "$cmd"; and continue
-        echo "▶ $cmd"
-        CI=true eval $cmd 2>&1 | tee -a $output_file
-        if test $pipestatus[1] -ne 0
-            return 1
+    if test -n "$test_cmd"
+        echo "# Auto Tests" >>$output_file
+        echo "=====" >>$output_file
+        for cmd in (string split '&&' -- $test_cmd)
+            set cmd (string trim $cmd)
+            test -z "$cmd"; and continue
+            echo "▶ $cmd" | tee -a $output_file
+            CI=true eval $cmd 2>&1 | tee -a $output_file
+            if test $pipestatus[1] -ne 0
+                return 1
+            end
         end
     end
     if test -n "$manual_test_file"
-        echo "▶ manual_test $manual_test_file"
+        echo "" >>$output_file
+        echo "# Manual Test Output" >>$output_file
+        echo "=====" >>$output_file
+        echo "▶ manual_test $manual_test_file" | tee -a $output_file
         manual_test $manual_test_file 2>&1 | tee -a $output_file
         if test $pipestatus[1] -ne 0
             return 1
