@@ -357,10 +357,34 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo ""
             echo "💾 Commit..."
 
+            set -l plan_dir (dirname $current_plan)
+            set -l should_delete false
+            if test -n "$prompts_path" -a -f "$prompts_path"
+                set should_delete true
+                set -l canonical_prompts (realpath $prompts_path)
+                for f in $plan_dir/*.md
+                    test (realpath $f) = (realpath $current_plan); and continue
+                    set -l other_prompts (__autoplan_frontmatter $f prompts)
+                    test -z "$other_prompts"; and continue
+                    if not string match -q '/*' $other_prompts
+                        set other_prompts (dirname $f)/$other_prompts
+                    end
+                    if test (realpath $other_prompts 2>/dev/null) = "$canonical_prompts"
+                        set should_delete false
+                        break
+                    end
+                end
+            end
+
+            set -l prompts_clean "Do not delete any prompts file."
+            if test "$should_delete" = true
+                set prompts_clean "Also delete the prompts file at $prompts_path."
+            end
+
             set -l commit_prompt (__autoplan_interpolate_prompt \
                 (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                 $current_plan $branch $test_cmd)
-            set commit_prompt (string replace -a -- '$PROMPTS_FILE' "$prompts_path" $commit_prompt)
+            set commit_prompt (string replace -a -- '$PROMPTS_CLEAN' "$prompts_clean" $commit_prompt)
             command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
         end
 

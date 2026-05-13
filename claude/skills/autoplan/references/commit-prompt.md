@@ -13,13 +13,15 @@ Gitmoji conventions:
 
 The commit message should be a short summary of what changed and why — reference the plan's title or context for the "why".
 
-## Step 2: Delete the executed plan and prompts files
+## Step 2: Delete completed plan file(s)
 
-Delete the plan file at `$PLAN_FILE` and the prompts file at `$PROMPTS_FILE` (if it exists).
+Delete the plan file at `$PLAN_FILE`.
 
-Do NOT delete any other files — other plans in the chain may not be completed yet.
+$PROMPTS_CLEAN
 
-Commit all deletions as a separate commit:
+Do NOT delete any other files.
+
+Commit the deletion(s) as a separate commit:
 ```
 🔥 Remove completed plan
 ```
