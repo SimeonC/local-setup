@@ -34,7 +34,7 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux attach-session -t $sess_name
         # Clean up any entries Claude Code wrote directly to the history file
         for _entry in (builtin history search --prefix "command claude")
-            builtin history delete --exact -- $_entry
+            builtin history delete --case-sensitive --exact -- $_entry
         end
     else
         # Already in tmux — rename current window and run directly
@@ -44,7 +44,7 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
         command claude $claude_args
         for _entry in (builtin history search --prefix "command claude")
-            builtin history delete --exact -- $_entry
+            builtin history delete --case-sensitive --exact -- $_entry
         end
     end
 end

@@ -4,7 +4,7 @@ Read the plan file at $PLAN_FILE.
 
 ## Your task
 
-Evaluate whether this plan is ready for fully automated implementation by the autoplan pipeline (gate → implement → test/fix → harden → verify/fix → commit). If any criteria below fail, edit the plan file directly to fix it. Write your verdict to $GATE_LOG when done.
+Evaluate whether this plan is ready for fully automated implementation by the autoplan pipeline (gate → implement → test/fix → harden → verify/fix → commit). If any criteria below fail, edit the plan file directly to fix it. Write your verdict to two sentinel files when done (see "Verdict" below).
 
 ## Evaluation criteria
 
@@ -69,6 +69,18 @@ Edit the plan file (and prompts file if needed) directly to fix the issue. Use t
 
 ## Verdict
 
-When done evaluating (and fixing if needed), write your verdict to $GATE_LOG:
-- If ALL criteria pass: write `READY` on the first line.
-- If you cannot fix a criterion (e.g. requires human decision): write `CANNOT_FIX` on the first line, followed by a numbered list of what remains unresolved.
+When done evaluating (and fixing if needed), write your verdict to TWO files. Both are required.
+
+### 1. `$GATE_RESULT` — machine-readable, exactly one line
+
+Write exactly one of:
+- `READY` — all criteria pass.
+- `CANNOT_FIX` — one or more criteria failed and require human decisions.
+
+No prose, no list, no trailing content. Just the single word on a single line.
+
+### 2. `$GATE_SUMMARY` — human-readable summary
+
+Write a short summary of what you evaluated and what (if anything) you edited in the plan or prompts files. Keep it concise — a few bullets or a short paragraph.
+
+If the result is `CANNOT_FIX`, include a numbered list of the unresolved items (what needs human input and why).
