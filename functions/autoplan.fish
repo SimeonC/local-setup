@@ -303,8 +303,13 @@ $gate_result"
             while true
                 set verify_pass (math $verify_pass + 1)
                 if test $verify_pass -gt $max_verify_passes
-                    echo "❌ Verify still finding issues after $max_verify_passes passes." >&2
-                    return 1
+                    echo "⚠️  Verify still finding issues after $max_verify_passes passes." >&2
+                    read -P "Continue cycling verify passes? [y/N] " -l _continue_verify
+                    if string match -qi 'y*' $_continue_verify
+                        set verify_pass 0
+                    else
+                        return 1
+                    end
                 end
 
                 echo ""
