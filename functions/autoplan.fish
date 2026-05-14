@@ -153,23 +153,62 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             __autoplan_save_state $plan_file $current_plan gate $branch
             echo "🔍 Gate: Evaluating and fixing plan if needed..."
 
-            rm -f ./tmp/autoplan-gate-output.txt
+            rm -f ./tmp/autoplan-gate-result.txt ./tmp/autoplan-gate-summary.txt
             set -l gate_prompt_file "$HOME/.claude/skills/autoplan/references/gate-prompt.md"
             set -l gate_prompt (cat $gate_prompt_file \
                 | string replace -a -- '$PLAN_FILE' "$current_plan" \
-                | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt')
-            command claude --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" --model sonnet --effort medium "$gate_prompt"
-            set -l gate_output (cat ./tmp/autoplan-gate-output.txt 2>/dev/null)
+                | string replace -a -- '$GATE_RESULT' './tmp/autoplan-gate-result.txt' \
+                | string replace -a -- '$GATE_SUMMARY' './tmp/autoplan-gate-summary.txt')
+            command claude --print --permission-mode $permission_mode --append-system-prompt "$worker_system_prompt" --model sonnet --effort medium "$gate_prompt"
 
-            if string match -q -- "*CANNOT_FIX*" $gate_output
-                echo "❌ Gate: plan cannot be made automatable:" >&2
-                echo "$gate_output" >&2
-                return 1
-            else if not string match -q -- "*READY*" $gate_output
-                echo "❌ Gate: sentinel file missing or unrecognised." >&2
-                return 1
+            set_color --bold
+            echo "📋 Gate Summary"
+            set_color normal
+            if test -f ./tmp/autoplan-gate-summary.txt
+                cat ./tmp/autoplan-gate-summary.txt
+            else
+                echo "(no summary file written)"
             end
-            echo "✅ Gate passed."
+
+            set -l gate_result ""
+            if test -f ./tmp/autoplan-gate-result.txt
+                set gate_result (head -1 ./tmp/autoplan-gate-result.txt | string trim)
+            end
+
+            set_color --bold
+            echo "🚦 Gate Result"
+            set_color normal
+            switch $gate_result
+                case READY
+                    set_color green; echo $gate_result; set_color normal
+                case CANNOT_FIX
+                    set_color red; echo $gate_result; set_color normal
+                case '*'
+                    set_color red; echo "(missing or unrecognised)"; set_color normal
+            end
+
+            switch $gate_result
+                case READY
+                    echo "✅ Gate passed."
+                case CANNOT_FIX
+                    echo "❌ Gate: plan cannot be made automatable." >&2
+                    echo "Opening interactive Claude session with gate summary so you can fix the plan…"
+                    set -l _handoff_prompt "Autoplan gate reported CANNOT_FIX for plan: $current_plan
+Branch: $branch
+
+The plan cannot be made automatically executable. Read the gate summary below, then help the user revise the plan file so a future autoplan run can proceed. Do NOT implement the plan — only edit the plan file (and prompts file if relevant). After edits, the user will re-run \`autoplan --continue\`.
+
+## Gate Summary
+"(cat ./tmp/autoplan-gate-summary.txt 2>/dev/null)"
+
+## Gate Result
+$gate_result"
+                    claude --permission-mode $permission_mode "$_handoff_prompt"
+                    return 1
+                case '*'
+                    echo "❌ Gate: sentinel file missing or unrecognised." >&2
+                    return 1
+            end
         end
 
         # ===== IMPLEMENT =====
@@ -385,7 +424,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                 $current_plan $branch $test_cmd)
             set commit_prompt (string replace -a -- '$PROMPTS_CLEAN' "$prompts_clean" $commit_prompt)
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+            command claude --print --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
         end
 
         # Follow linked list
@@ -444,7 +483,7 @@ Output a brief summary of what was completed and flag anything that looks incomp
             set -l pr_prompt (__autoplan_interpolate_prompt \
                 (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
                 $current_plan $branch $test_cmd)
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort low "$pr_prompt"
+            command claude --print --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort low "$pr_prompt"
             set -l pr_body (cat ./tmp/autoplan-pr-body.txt 2>/dev/null)
 
             git push origin $branch
@@ -502,7 +541,9 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
         | string replace -a -- '$VERIFY_LOG' './tmp/autoplan-verify-result.txt' \
         | string replace -a -- '$BRANCH' "$branch_name" \
         | string replace -a -- '$TEST_CMD' "$test_cmd_val" \
-        | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt'
+        | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt' \
+        | string replace -a -- '$GATE_RESULT' './tmp/autoplan-gate-result.txt' \
+        | string replace -a -- '$GATE_SUMMARY' './tmp/autoplan-gate-summary.txt'
 end
 
 function __autoplan_run_tests --argument-names test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test"

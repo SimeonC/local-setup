@@ -19,7 +19,7 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         # Not in tmux — create a detached session, send claude into it, attach
         set -l sess_name "claude-$fish_pid"
         # Write args to a temp script — avoids string escaping issues
-        set -l tmpscript (mktemp /tmp/.claude_XXXXXX.fish)
+        set -l tmpscript /tmp/.claude_(date +%Y%m%d_%H%M%S)_$fish_pid.fish
         echo "command claude" (string escape -- $claude_args) > $tmpscript
         # Pass command directly to new-session (not send-keys) so it's never typed
         # into an interactive shell and never recorded in history.
@@ -33,7 +33,9 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
         tmux attach-session -t $sess_name
         # Clean up any entries Claude Code wrote directly to the history file
-        builtin history delete --prefix "command claude"
+        for _entry in (builtin history search --prefix "command claude")
+            builtin history delete --exact -- $_entry
+        end
     else
         # Already in tmux — rename current window and run directly
         tmux set-option -w automatic-rename off
@@ -41,6 +43,8 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux set-option -g set-titles on 2>/dev/null
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
         command claude $claude_args
-        builtin history delete --prefix "command claude"
+        for _entry in (builtin history search --prefix "command claude")
+            builtin history delete --exact -- $_entry
+        end
     end
 end
