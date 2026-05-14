@@ -249,9 +249,14 @@ $gate_result"
                 else
                     set fix_attempt (math $fix_attempt + 1)
                     if test $fix_attempt -ge $max_fix_attempts
-                        echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
+                        echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
                         echo "Test output: ./tmp/autoplan-test-output.txt" >&2
-                        return 1
+                        read -P "Continue cycling fix attempts? [y/N] " -l _continue_fix
+                        if string match -qi 'y*' $_continue_fix
+                            set fix_attempt 0
+                        else
+                            return 1
+                        end
                     end
 
                     echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
@@ -354,8 +359,14 @@ $gate_result"
                         else
                             set fix_attempt (math $fix_attempt + 1)
                             if test $fix_attempt -ge $max_fix_attempts
-                                echo "❌ Tests still failing after $max_fix_attempts fix attempts." >&2
-                                return 1
+                                echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
+                                echo "Test output: ./tmp/autoplan-test-output.txt" >&2
+                                read -P "Continue cycling fix attempts? [y/N] " -l _continue_fix
+                                if string match -qi 'y*' $_continue_fix
+                                    set fix_attempt 0
+                                else
+                                    return 1
+                                end
                             end
 
                             echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
