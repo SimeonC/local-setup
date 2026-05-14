@@ -69,6 +69,7 @@ alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w 
 alias record "replayio record"
 alias dclaude danger_claude
 alias ddclaude danger_danger_claude
+alias pdclaude 'danger_danger_claude "$(pbpaste)"'
 alias pclaude print_claude
 
 function npm --wraps npm
