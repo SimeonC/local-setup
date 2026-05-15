@@ -4,6 +4,7 @@
 
 ```yaml
 ---
+description: "2-3 sentence summary of what this plan does and why."  # required — shown in progress output
 branch: feat/...           # required — git branch name
 test_cmd: npm run test:ai   # required — command(s) to run tests
 manual_test: ./plan-name.manual.md  # optional — path to manual test instructions file
@@ -21,7 +22,7 @@ next: ./<slug>-2.md         # optional — next plan in chain
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
 - **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `next` and `pr_title` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory.
+All fields except `next`, `pr_title`, and `manual_test` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory.
 
 ## Body Sections
 
@@ -61,6 +62,7 @@ First plan file (`auth-refresh-1.md`):
 
 ```markdown
 ---
+description: "Add silent token refresh to the auth service. Access tokens currently expire after 1 hour and log users out; this plan adds a refresh endpoint and updates the controller to retry 401s transparently."
 branch: feat/auth-refresh
 test_cmd: npm run test:ai
 pr_title: "Add token refresh to auth service"

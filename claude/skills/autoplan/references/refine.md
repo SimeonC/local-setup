@@ -6,7 +6,13 @@
 - If input is a folder: glob `*.md` files, identify root(s) as plans not referenced by any other plan's `next:`. Follow each chain from each root.
 - Report multiple roots or orphaned plans (plans not reachable from any root and not a root themselves) as issues.
 
-## Step 2: Chain Integrity
+## Step 2: Frontmatter Completeness
+
+For each plan, check all required frontmatter fields are present and non-empty:
+- `description` — must be a quoted single-line string (2-3 sentences). If missing, generate one from the plan's Context + Scope sections and add it.
+- `branch`, `test_cmd` (or `manual_test`), `prompts` — flag any missing as errors.
+
+## Step 3: Chain Integrity
 
 Apply existing chain integrity checks:
 - All `next:` files exist on disk
@@ -14,7 +20,7 @@ Apply existing chain integrity checks:
 - Chain terminates (last plan has no `next:`)
 - Report any broken links as errors
 
-## Step 3: Per-Plan Atomicity Re-check
+## Step 4: Per-Plan Atomicity Re-check
 
 For each plan in the chain, re-evaluate atomicity against all four criteria:
 1. **Single session**: Could be implemented in ~one Claude session (~15-30 min)
@@ -22,7 +28,7 @@ For each plan in the chain, re-evaluate atomicity against all four criteria:
 3. **Automatable verification**: Commands that pass/fail — not subjective
 4. **No internal ordering**: Steps within a plan must not depend on each other's order
 
-## Step 4: Cross-Plan Inconsistencies
+## Step 5: Cross-Plan Inconsistencies
 
 Check for:
 - Scope overlap between plans (same file/function modified by multiple plans)
@@ -30,7 +36,7 @@ Check for:
 - Contradictory conventions (different naming, patterns, file locations between plans)
 - Orphaned file references (plan mentions a file/function that no earlier plan creates)
 
-## Step 5: Prompts Drift
+## Step 6: Prompts Drift
 
 For each plan's referenced `prompts` file:
 - All 5 sections present: `## implement`, `## fix_test`, `## fix_verify`, `## verify`, `## harden`
@@ -38,7 +44,7 @@ For each plan's referenced `prompts` file:
 - Test-run commands: quick grep in the repo to confirm `package.json` script / nx project still exists
 - Domain rules reference files that still exist on disk
 
-## Step 6: Gap Detection
+## Step 7: Gap Detection
 
 Enumerate likely missing work across these categories:
 - Database migrations or schema changes
@@ -55,7 +61,7 @@ For each gap found, it must be resolved as one of:
 - **Ignored**: add to the plan's `## Out of Scope` with explicit reason
 - **Deferred**: create a new linked plan stub or note in `## Out of Scope` with a pointer to a follow-up
 
-## Step 7: Report and Resolve Issues
+## Step 8: Report and Resolve Issues
 
 Output a findings table:
 
@@ -69,11 +75,11 @@ Apply the chosen action:
 - Ignore: add entry to plan's `## Out of Scope`
 - Defer: create a follow-up plan stub file and link it, or add to `## Out of Scope` with pointer
 
-## Step 8: Re-run Until Clean
+## Step 9: Re-run Until Clean
 
-Re-run all checks (Steps 2–6) after applying fixes. Repeat until no issues remain.
+Re-run all checks (Steps 2–7) after applying fixes. Repeat until no issues remain.
 
-## Step 9: Final Readiness Table
+## Step 10: Final Readiness Table
 
 | Plan | Chain OK? | Atomic? | Prompts OK? | Gaps Resolved? | Status |
 |------|-----------|---------|-------------|----------------|--------|

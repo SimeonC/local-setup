@@ -11,7 +11,7 @@ Use AskUserQuestion (up to 2 rounds, max 4 questions each).
 - PR title
 
 **Round 2 — Domain rules:**
-- Task description (what needs to be built, high level)
+- Task description: 2-3 sentences summarising what needs to be built and why (becomes the `description` frontmatter field, shown in progress output)
 - Domain-specific conventions for implementation (imports, patterns, file locations)
 - Domain-specific verification checks (what to audit beyond "tests pass")
 - Does this plan have flows that can't (or shouldn't) be auto-tested? If yes, create a companion `.md` file with step-by-step instructions and set `manual_test: <path>` in frontmatter. The harness runs it after `test_cmd` passes and deletes the file on completion.
@@ -29,6 +29,8 @@ Create two files in the chosen directory:
 - `<slug>-prompts.md` — the prompts file
 
 See [plan-format.md](references/plan-format.md) and [prompts-format.md](references/prompts-format.md) for format specs.
+
+The `description` frontmatter field must be a quoted single-line string of 2-3 sentences summarising what the plan does and why. For multi-plan chains, each plan's `description` should summarise only that plan's unit of work (not the whole chain).
 
 Key points for prompts file:
 - Populate all 5 sections with domain-specific rules from Step 1

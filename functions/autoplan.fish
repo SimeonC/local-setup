@@ -143,9 +143,13 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             end
         end
 
+        set -l plan_desc (__autoplan_frontmatter $current_plan description)
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "Plan: $current_plan"
+        if test -n "$plan_desc"
+            echo "$plan_desc"
+        end
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
         # ===== GATE =====
