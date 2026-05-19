@@ -2,7 +2,7 @@ Finalize and commit all changes for the current plan iteration.
 
 ## Step 1: Commit implementation changes
 
-Stage and commit all implementation changes (source code + test files) with a gitmoji commit message.
+Run `git add -A` to stage ALL changes in the repo (do NOT cherry-pick files — stage everything), then commit with a gitmoji commit message.
 
 Gitmoji conventions:
 - New feature: `✨ Add ...`
