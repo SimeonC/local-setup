@@ -79,6 +79,19 @@ end
 function npx --wraps npx
     _npm_with_auth_refresh npx $argv
 end
+function pnpm --wraps pnpm
+    _npm_with_auth_refresh pnpm $argv
+end
+function pnpx --wraps pnpx
+    _npm_with_auth_refresh pnpx $argv
+end
+function aws --wraps aws
+    if test (count $argv) -ge 2; and test "$argv[1]" = codeartifact; and test "$argv[2]" = login
+        _npm_with_auth_refresh aws $argv
+    else
+        command aws $argv
+    end
+end
 
 # Manual activation for VSCode/Cursor terminal sessions compatibility
 mise activate fish | source
