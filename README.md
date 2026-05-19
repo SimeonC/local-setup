@@ -14,6 +14,8 @@ brew install jq
 brew install fish
 brew install mise
 brew install gum
+brew install mdcat
+brew install glow
 ```
 
 ### Setup Colima (Docker)

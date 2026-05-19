@@ -39,10 +39,21 @@ Check for:
 ## Step 6: Prompts Drift
 
 For each plan's referenced `prompts` file:
-- All 5 sections present: `## implement`, `## fix_test`, `## fix_verify`, `## verify`, `## harden`
-- Variables used correctly: `$PLAN_FILE` in implement, `$TEST_LOG` in fix_test, `$VERIFY_LOG` in verify/fix_verify
-- Test-run commands: quick grep in the repo to confirm `package.json` script / nx project still exists
-- Domain rules reference files that still exist on disk
+- **One prompts file per plan** — each plan must point to its OWN dedicated prompts file. If two plans share a `prompts:` path, flag as a violation and split: copy the shared file to `<slug>-N-prompts.md` per plan, tailor each, update frontmatter.
+- Sections present should be a subset of: `## implement`, `## fix_test`, `## fix_verify`, `## fix_verify_cmd`, `## verify`, `## harden`. Missing sections are OK — the harness still runs the phase with only the system-prompt process rules.
+- **Domain context only — flag any process-rule language.** Process rules are harness-owned and must NOT appear in any section. Flag and remove if found:
+  - TDD step lists (red/green/commit ordering).
+  - "Do NOT commit / push / stage / stash / reset / revert / ...".
+  - Plan-scope discipline restatements ("only implement Scope", "ignore `next:`", "spec is only $PLAN_FILE").
+  - Sentinel-file write contracts (`ALL_GOOD` / `ISSUES_FOUND`).
+  - "Audit-only" / "Do NOT edit files" stance for `## verify`.
+  - Refactor-confirmation rules.
+  - Test integrity rules (`.only`/`.skip`/TODO bans, "every public function must have a test").
+  - "Do NOT run lint/typecheck/build/full test suites".
+- Variables used in domain notes are valid (`$PLAN_FILE`, `$TEST_LOG`, `$VERIFY_LOG`, `$VERIFY_CMD_LOG`, `$BRANCH`, `$TEST_CMD`).
+- Test-run commands referenced in domain context: quick grep in the repo to confirm `package.json` script / nx project still exists.
+- Domain rules reference files that still exist on disk.
+- `## harden` section MUST NOT contain literal shell commands or test-runner invocations (e.g. `npm run lint`, `mix test`, `nx run …`). Those are deterministic checks that belong in the plan's `verify_cmds:` frontmatter list. If found, flag the issue and move the commands to frontmatter.
 
 ## Step 7: Gap Detection
 

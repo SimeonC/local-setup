@@ -4,6 +4,7 @@ set -gx LANG en_US.UTF-8
 set -gx RAILS_ENV development
 set -gx TEST_ELASTICSEARCH true
 set -gx PNPM_HOME "$HOME/Library/pnpm"
+fish_add_path -g $PNPM_HOME/bin
 set -gx DENO_DIR "$HOME/Library/Caches/deno"
 set -gx EDITOR "zed --wait"
 set -gx VISUAL "zed --wait"
@@ -69,7 +70,7 @@ alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w 
 alias record "replayio record"
 alias dclaude danger_claude
 alias ddclaude danger_danger_claude
-alias pdclaude 'danger_danger_claude "$(pbpaste)"'
+alias pdclaude 'danger_danger_claude "/plan $(pbpaste)"'
 alias pclaude print_claude
 
 function npm --wraps npm

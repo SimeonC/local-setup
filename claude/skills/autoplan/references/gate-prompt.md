@@ -52,20 +52,30 @@ Fail: "Add an endpoint for token refresh"
 
 The plan must be completable in a single Claude session (~15-30 min of work). If it has internal ordering (step A must precede step B), it should be split into separate linked plans.
 
-### 7. Prompts file completeness
+### 7. Prompts file shape
 
-If a `prompts` path is specified, the referenced file must exist and contain all 5 required sections:
-- `## implement`
-- `## fix_test`
-- `## fix_verify`
-- `## verify`
-- `## harden`
+If a `prompts` path is specified, the referenced file must exist. Sections (`## implement`, `## fix_test`, `## fix_verify`, `## fix_verify_cmd`, `## verify`, `## harden`) are optional — missing sections fall back to the harness's process-rule-only prompt. The fix sections SHOULD include a concrete single-failing-file run command for this domain.
 
-Each fix section must include a concrete command for running a single failing test file.
+**Domain context only — process rules are harness-owned.** If any section contains process-rule language, flag it and remove it. The following are harness-owned and must NOT appear in any prompts-file section:
+
+- TDD step lists (red/green/commit ordering).
+- "Do NOT commit / push / stage / stash / reset / revert / ...".
+- Plan-scope discipline restatements ("only implement Scope", "ignore `next:`").
+- Sentinel-file write contracts (`ALL_GOOD` / `ISSUES_FOUND`).
+- "Audit-only" / "Do NOT edit files" stance for `## verify`.
+- Refactor-confirmation rules.
+- Test integrity rules (`.only`/`.skip`/TODO bans, "every public function must have a test").
+- "Do NOT run lint/typecheck/build/full test suites".
+
+The prompts file's `## harden` section must NOT contain literal shell commands or test-runner invocations (e.g. `npm run lint`, `mix test`, `nx run …`). Those are deterministic checks that belong in the plan's `verify_cmds:` frontmatter list (executed by the harness, not by Claude). If found, move them to the plan's `verify_cmds:`.
 
 ## When a criterion fails
 
 Edit the plan file (and prompts file if needed) directly to fix the issue. Use the codebase context to fill in specifics — file paths, function names, test commands, etc.
+
+## Rules
+
+- Do NOT stage, commit, push, or open a PR. A later pipeline step handles commits.
 
 ## Verdict
 

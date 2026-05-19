@@ -9,10 +9,18 @@ branch: feat/...           # required — git branch name
 test_cmd: npm run test:ai   # required — command(s) to run tests
 manual_test: ./plan-name.manual.md  # optional — path to manual test instructions file
 pr_title: "..."             # optional — PR title string; omit to skip PR creation (commits only)
-prompts: ./<slug>-prompts.md # required — path to prompts file
+prompts: ./<slug>-N-prompts.md # required — path to THIS plan's dedicated prompts file (one prompts file per plan, never shared)
+verify_cmds:                # optional — YAML list of deterministic shell commands run by the harness between harden_verify and commit
+  - npm run lint:fix
+  - npm run check
+  - npm run test:unit
 next: ./<slug>-2.md         # optional — next plan in chain
 ---
 ```
+
+### verify_cmds: Deterministic Verification Commands
+
+`verify_cmds` is an optional YAML list of shell commands executed by the fish harness (not Claude) between the `harden_verify` and `commit` phases. Use it for deterministic checks — lint, typecheck, build, test suites, i18n checks — where Claude exercises zero judgment on success. The harness runs each command in order, fail-fast: on the first non-zero exit, Claude is invoked with the `fix_verify_cmd` prompt to fix the failing command, then the loop restarts from the first command (to catch regressions from the fix). `test_cmd` still runs separately during the test/fix phase before harden.
 
 ### test_cmd: Automated and Manual Verification
 
@@ -66,7 +74,7 @@ description: "Add silent token refresh to the auth service. Access tokens curren
 branch: feat/auth-refresh
 test_cmd: npm run test:ai
 pr_title: "Add token refresh to auth service"
-prompts: ./auth-refresh-prompts.md
+prompts: ./auth-refresh-1-prompts.md
 next: ./auth-refresh-2.md
 ---
 

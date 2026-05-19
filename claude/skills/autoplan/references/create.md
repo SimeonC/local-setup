@@ -26,7 +26,9 @@ Skip questions where `$ARGUMENTS` already provides the answer.
 
 Create two files in the chosen directory:
 - `<slug>-1.md` — the plan file (always name the first plan with `-1` suffix, even for single-plan chains)
-- `<slug>-prompts.md` — the prompts file
+- `<slug>-1-prompts.md` — the prompts file for plan 1
+
+**ONE prompts file per plan.** Never share a single prompts file across multiple plans, even when the rules would be identical. Per-plan files force per-plan tailoring (Scope-specific guidance, focused fix/verify checks) and prevent the "generic prompts" laziness that produces out-of-scope drift.
 
 See [plan-format.md](references/plan-format.md) and [prompts-format.md](references/prompts-format.md) for format specs.
 
@@ -74,8 +76,10 @@ If all pass, the plan is atomic. If any fail, proceed to Step 4.
 If a plan is not atomic, split into a linked chain:
 
 - Name sub-plans: `<slug>-1.md`, `<slug>-2.md`, etc.
+- **Each sub-plan gets its OWN prompts file**: `<slug>-1-prompts.md`, `<slug>-2-prompts.md`, etc. Start by copying the first plan's prompts file as a baseline for each new sub-plan, then tailor it to that sub-plan's specific Scope (focused fix/verify checks, scope-aware harden hints). Never point multiple plans at the same prompts file.
 - Each sub-plan has own frontmatter:
-  - Inherits `branch`, `test_cmd`, `prompts` from first plan (unless overridden); `pr_title` is optional
+  - Inherits `branch`, `test_cmd` from first plan (unless overridden); `pr_title` is optional
+  - `prompts: ./<slug>-N-prompts.md` — points at THIS plan's dedicated prompts file
   - Each sub-plan (except last) has `next: ./<slug>-N+1.md`
 - Each sub-plan has its own **Scope** and **Verification** scoped to just that unit's work
 
@@ -88,13 +92,15 @@ If a plan is not atomic, split into a linked chain:
 - Chain terminates (last plan has no `next:`)
 - Report any broken links as errors and fix them
 
-## Step 6: Validate Prompts File
+## Step 6: Validate Prompts Files
 
-Check:
+For EACH plan's referenced prompts file:
+- File exists at the path in the plan's `prompts:` frontmatter.
+- No two plans point to the same prompts file (one-prompts-per-plan invariant). If they do, copy and tailor — never share.
 - All 5 sections present: `## implement`, `## fix_test`, `## fix_verify`, `## verify`, `## harden`
 - Variables used correctly: `$PLAN_FILE` in implement, `$TEST_LOG` in fix_test, `$VERIFY_LOG` in verify and fix_verify
-- Verify section contains specific structural checks, not generic "check correctness"
-- Fix sections contain explicit "do NOT" rules
+- Verify section contains specific structural checks tied to THIS plan's Scope — not generic "check correctness".
+- Fix sections contain explicit "do NOT" rules.
 
 Fix any issues found.
 
