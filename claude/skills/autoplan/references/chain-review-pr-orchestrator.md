@@ -4,7 +4,6 @@ You are the orchestrator for the final chain-review and PR-body-generation phase
 
 Branch: $BRANCH
 Plan directory: $PLAN_DIR
-Root plan: $PLAN_FILE
 
 ## Step 0: Create the team
 
@@ -19,7 +18,7 @@ Review the completed autoplan chain on branch `$BRANCH` and clean up.
 
 ## Step 1: Review commits
 Run: `git log --oneline origin/main..$BRANCH`
-Cross-check each commit against the plan chain rooted at `$PLAN_FILE` to verify nothing was missed or left incomplete.
+Cross-check each commit against the plan chain on branch `$BRANCH` (commits + leftover files in $PLAN_DIR) to verify nothing was missed or left incomplete.
 
 ## Step 2: Clean up leftover files
 Delete any remaining autoplan plan/prompts `.md` files in `$PLAN_DIR` that were part of this chain.

@@ -26,9 +26,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     end
 
     # ===== SETUP =====
-    set -l plan_file ""
     set -l branch ""
     set -l current_plan ""
+    set -l pr_title ""
     # Clear any stale global skip_to_phase from a previous run in this session
     set -eg skip_to_phase
 
@@ -37,10 +37,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         for _line in (cat .autoplan-progress)
             set -l _parts (string split -m 1 '=' $_line)
             switch $_parts[1]
-                case root_plan; set plan_file $_parts[2]
                 case plan;      set current_plan $_parts[2]
                 case phase;     set -g skip_to_phase $_parts[2]
                 case branch;    set branch $_parts[2]
+                case pr_title;  set pr_title $_parts[2]
             end
         end
         if not git show-ref --verify --quiet refs/heads/$branch
@@ -51,21 +51,22 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             git checkout $branch
         end
     else
-        set plan_file (realpath $argv[1])
-        if not test -f $plan_file
+        set current_plan (realpath $argv[1])
+        if not test -f $current_plan
             echo "Error: Plan file not found: $argv[1]" >&2
             return 1
         end
-        set current_plan $plan_file
     end
 
-    set -l test_cmd (__autoplan_frontmatter $plan_file test_cmd)
-    set -l pr_title (__autoplan_frontmatter $plan_file pr_title)
-    set -l prompts_path (__autoplan_frontmatter $plan_file prompts)
-    set -l manual_test_file (__autoplan_frontmatter $plan_file manual_test)
+    set -l test_cmd (__autoplan_frontmatter $current_plan test_cmd)
+    if test -z "$pr_title"
+        set pr_title (__autoplan_frontmatter $current_plan pr_title)
+    end
+    set -l prompts_path (__autoplan_frontmatter $current_plan prompts)
+    set -l manual_test_file (__autoplan_frontmatter $current_plan manual_test)
     if test -n "$manual_test_file"
         if not string match -q '/*' $manual_test_file
-            set manual_test_file (dirname $plan_file)/$manual_test_file
+            set manual_test_file (dirname $current_plan)/$manual_test_file
         end
         if not test -f "$manual_test_file"
             echo "Error: manual_test file not found: $manual_test_file" >&2
@@ -74,7 +75,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     end
 
     if test -z "$branch"
-        set branch (__autoplan_frontmatter $plan_file branch)
+        set branch (__autoplan_frontmatter $current_plan branch)
     end
 
     if test -z "$branch"
@@ -87,7 +88,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     end
     if test -n "$prompts_path"
         if not string match -q '/*' $prompts_path
-            set prompts_path (dirname $plan_file)/$prompts_path
+            set prompts_path (dirname $current_plan)/$prompts_path
         end
     end
 
@@ -149,7 +150,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # ===== GATE + IMPLEMENT (combined orchestrator) =====
         if not __autoplan_check_skip gate_implement
-            __autoplan_save_state $plan_file $current_plan gate_implement $branch
+            __autoplan_save_state $current_plan gate_implement $branch $pr_title
             echo "🔍 Gate + Implement orchestrator..."
 
             rm -f ./tmp/autoplan-gate-result.txt ./tmp/autoplan-gate-summary.txt
@@ -218,7 +219,7 @@ $gate_result"
 
         # ===== TEST/FIX LOOP =====
         if not __autoplan_check_skip test_fix
-            __autoplan_save_state $plan_file $current_plan test_fix $branch
+            __autoplan_save_state $current_plan test_fix $branch $pr_title
             set -l fix_attempt 0
 
             while true
@@ -254,7 +255,7 @@ $gate_result"
 
         # ===== HARDEN + VERIFY (separate invocations with fix loop) =====
         if not __autoplan_check_skip harden_verify
-            __autoplan_save_state $plan_file $current_plan harden_verify $branch
+            __autoplan_save_state $current_plan harden_verify $branch $pr_title
             set -l verify_pass 0
 
             while true
@@ -347,7 +348,7 @@ $gate_result"
 
         # ===== VERIFY_CMDS (deterministic harness-driven checks) =====
         if not __autoplan_check_skip verify_cmds
-            __autoplan_save_state $plan_file $current_plan verify_cmds $branch
+            __autoplan_save_state $current_plan verify_cmds $branch $pr_title
 
             set -l verify_cmds (__autoplan_frontmatter_list $current_plan verify_cmds)
             if test (count $verify_cmds) -gt 0
@@ -414,7 +415,7 @@ $gate_result"
 
         # ===== COMMIT =====
         if not __autoplan_check_skip commit
-            __autoplan_save_state $plan_file $current_plan commit $branch
+            __autoplan_save_state $current_plan commit $branch $pr_title
             echo ""
             echo "💾 Commit..."
 
@@ -463,19 +464,19 @@ $gate_result"
             end
             set current_plan $next_plan
             # Update state so --continue resumes at the next plan's gate
-            __autoplan_save_state $plan_file $current_plan gate_implement $branch
+            __autoplan_save_state $current_plan gate_implement $branch $pr_title
         else
             break
         end
     end
 
     # ===== CHAIN REVIEW + PR (combined orchestrator) =====
-    __autoplan_save_state $plan_file $current_plan chain_review_pr $branch
+    __autoplan_save_state $current_plan chain_review_pr $branch $pr_title
     if not __autoplan_check_skip chain_review_pr
         echo ""
         echo "🔍🚀 Chain review + PR orchestrator..."
 
-        set -l plan_dir (dirname $plan_file)
+        set -l plan_dir (dirname $current_plan)
         rm -f ./tmp/autoplan-pr-body.txt
 
         if test -n "$pr_title"
@@ -484,7 +485,7 @@ $gate_result"
                 $current_plan $branch $test_cmd)
 
             set -l cr_orch (cat "$HOME/.claude/skills/autoplan/references/chain-review-pr-orchestrator.md" \
-                | string replace -a -- '$PLAN_FILE' "$plan_file" \
+                | string replace -a -- '$PLAN_FILE' "$current_plan" \
                 | string replace -a -- '$BRANCH' "$branch" \
                 | string replace -a -- '$PLAN_DIR' "$plan_dir" \
                 | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub")
@@ -506,7 +507,7 @@ $gate_result"
 
 ## Step 1: Review commits
 Run: git log --oneline origin/main..$branch
-Cross-check each commit against the plan chain rooted at $plan_file to verify nothing was missed.
+Cross-check each commit against the plan chain on branch `$branch` (commits in $plan_dir) to verify nothing was missed.
 
 ## Step 2: Clean up leftover files
 Delete any remaining autoplan plan/prompts .md files in $plan_dir that were part of this chain.
@@ -647,11 +648,11 @@ function __autoplan_run_tests --argument-names test_cmd output_file manual_test_
     return 0
 end
 
-function __autoplan_save_state --argument-names root_plan plan phase branch
-    echo "root_plan=$root_plan" > .autoplan-progress
-    echo "plan=$plan" >> .autoplan-progress
+function __autoplan_save_state --argument-names plan phase branch pr_title
+    echo "plan=$plan" > .autoplan-progress
     echo "phase=$phase" >> .autoplan-progress
     echo "branch=$branch" >> .autoplan-progress
+    echo "pr_title=$pr_title" >> .autoplan-progress
     set_color brblack
     echo "↩️  Resume from this phase ($phase) with: autoplan --continue"
     set_color normal
