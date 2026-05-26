@@ -6,14 +6,11 @@ function dev
     source ./local_dev.fish
   else if test -f ./package.json
     if string match -r "\"dev\":\\s*\"[^\"\\n]+" -q -- (cat ./package.json)
-      echo "npm run dev -- $argv"
-      npm run dev -- $argv
+      _pm_run run dev -- $argv
     else if string match -r "\"test:dev\":\\s*\"[^\"\\n]+" -q -- (cat ./package.json)
-      echo "npm run test:dev -- $argv"
-      npm run test:dev -- $argv
+      _pm_run run test:dev -- $argv
     else if string match -r "\"start:local-monolith\":\\s*\"[^\"\\n]+" -q -- (cat ./package.json)
-      echo "npm run start:local-monolith -- $argv"
-      npm run start:local-monolith -- $argv
+      _pm_run run start:local-monolith -- $argv
     else
       echo "No `dev` or `test:dev` script found in package.json, trying `start`"
       start

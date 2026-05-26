@@ -24,17 +24,17 @@ function smart_prettier
 
     echo (set_color cyan)"Using formatter: $formatter"(set_color normal)
     if test "$formatter" = prettier
-        echo "Prettier Version: " (npx prettier --version)
+        echo "Prettier Version: " (_pm_exec prettier --version)
     end
 
     if test "$argv" = --force; or test "$argv" = -f
         echo (set_color yellow)"Force formatting all files"(set_color normal)
-        npx $formatter $formatter_args .
+        _pm_exec $formatter $formatter_args .
     else if test (count $modified_files) -eq 0
         echo (set_color green)"No changes or not a git repository, formatting all files"(set_color normal)
-        npx $formatter $formatter_args .
+        _pm_exec $formatter $formatter_args .
     else
         echo (set_color yellow)"Formatting "(count $modified_files)" changed files"(set_color normal)
-        npx $formatter $formatter_args $modified_files
+        _pm_exec $formatter $formatter_args $modified_files
     end
 end

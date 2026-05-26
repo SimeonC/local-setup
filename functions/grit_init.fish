@@ -4,7 +4,7 @@ function grit_init
   mkdir patterns
   ln -s ~/.config/fish/grit_patterns/ patterns/local
   cd ..
-  npx grit init
+  _pm_exec grit init
   echo "version: 0.0.1
 patterns:
   - name: github.com/getgrit/js#*

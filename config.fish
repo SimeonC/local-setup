@@ -56,14 +56,14 @@ alias bld build
 alias ni install
 alias nci "install --clean"
 alias ani "all_npm_projects_install"
-alias audit "npm run audit"
+alias audit "_pm_run run audit"
 alias ql quality
 alias lint quality
 alias qf "quality --fix"
 alias format "quality --fix"
 alias tc typecheck
 alias m multi_run
-alias clog "npm run co:login"
+alias clog "_pm_run run co:login"
 alias prw smart_prettier
 alias grit_refactor "grit apply --force refactor; and prettier --log-level=error -w ."
 alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w ."

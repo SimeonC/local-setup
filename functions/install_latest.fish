@@ -82,7 +82,7 @@ function install_latest_in
     end
   end
   mv $package_json_tmp $package_json
-  npx prettier --log-level=error --write $package_json
+  _pm_exec prettier --log-level=error --write $package_json
 end
 
 function install_latest

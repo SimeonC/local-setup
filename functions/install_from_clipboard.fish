@@ -18,9 +18,9 @@ function install_from_clipboard
     set lines (string split "\n" -- $clipboard_content)
 
     set -l pkgs
-    # First, extract from install command lines
+    # First, extract from install command lines (npm, pnpm, bun)
     for line in $lines
-        set -l match (string match -r '^(npm install|yarn add) ([^ ]+)$' -- $line)
+        set -l match (string match -r '^(npm install|yarn add|pnpm add|bun add) ([^ ]+)$' -- $line)
         if test $status -eq 0
             set pkgs $pkgs $match[3]
         end
@@ -59,13 +59,23 @@ function install_from_clipboard
         end
     end
 
+    set -l pm (_pm_detect $dir)
+
     if test (count $dep_pkgs) -gt 0
         echo Installing dependencies: $dep_pkgs
-        npm install $legacy_peer_deps_flag $dep_pkgs
+        # --legacy-peer-deps is npm-only; use _pm_run for pnpm/bun
+        if test "$pm" = npm; and test -n "$legacy_peer_deps_flag"
+            npm install $legacy_peer_deps_flag $dep_pkgs
+        else
+            _pm_run i $dep_pkgs
+        end
     end
     if test (count $dev_pkgs) -gt 0
         echo Installing devDependencies: $dev_pkgs
-        npm install --save-dev $legacy_peer_deps_flag $dev_pkgs
+        if test "$pm" = npm; and test -n "$legacy_peer_deps_flag"
+            npm install --save-dev $legacy_peer_deps_flag $dev_pkgs
+        else
+            _pm_run i -D $dev_pkgs
+        end
     end
 end
-

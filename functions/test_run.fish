@@ -1,6 +1,6 @@
 function test_run
   if test -f ./package.json
-    npm test
+    _pm_run test
   else if test -f ./Gemfile
     if count $argv > /dev/null
       bundle exec rspec $argv

@@ -12,12 +12,12 @@ function grit_auto
       if test -n "$pattern_file"
         set folder_path (grep -oE '^limit:\s*.*' $pattern_file | sed 's/^limit:\s*//' | string trim)
         if test -n "$folder_path"
-          npx grit apply --force $arg $folder_path
+          _pm_exec grit apply --force $arg $folder_path
         else
-          npx grit apply --force $arg
+          _pm_exec grit apply --force $arg
         end
       else
-        npx grit apply --force $arg
+        _pm_exec grit apply --force $arg
       end
       git add .
       echo "Checking for files to remove..."
@@ -28,8 +28,8 @@ function grit_auto
       git add .
       set diff_files (git diff --name-only --staged --diff-filter=d)
       if test -n "$diff_files"
-        npx eslint --fix $diff_files; or true
-        npx prettier --write $diff_files; or true
+        _pm_exec eslint --fix $diff_files; or true
+        _pm_exec prettier --write $diff_files; or true
       end
       echo "Committing changes..."
       git add .
@@ -41,8 +41,8 @@ function grit_auto
   git add .
   set diff_files (git diff --name-only --staged --diff-filter=d)
   if test -n "$diff_files"
-    npx eslint --fix $diff_files; or true
-    npx prettier --write $diff_files; or true
+    _pm_exec eslint --fix $diff_files; or true
+    _pm_exec prettier --write $diff_files; or true
     git add .
     git commit -m "🚧 format all files" --no-verify
   end

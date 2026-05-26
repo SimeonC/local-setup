@@ -10,18 +10,18 @@ function typecheck
 
   if test -f ./nx.json
     printf "$green%s$reset\n" "NX repository detected"
-    printf "$cyan%s$reset\n" "npx nx affected --target=typecheck"
-    npx nx affected --target=typecheck
+    printf "$cyan%s$reset\n" "Running nx affected --target=typecheck"
+    _pm_exec nx affected --target=typecheck
   else if test -f ./package.json
     if string match -r "\"typecheck\":\\s*\"[^\"\\n]+" -q -- (cat ./package.json)
-      printf "$cyan%s$reset\n" "npm run typecheck"
-      npm run typecheck
+      printf "$cyan%s$reset\n" "Running typecheck"
+      _pm_run run typecheck
     else if string match -r "\"tsc\":\\s*\"[^\"\\n]+" -q -- (cat ./package.json)
-      printf "$cyan%s$reset\n" "npm run tsc"
-      npm run tsc
+      printf "$cyan%s$reset\n" "Running tsc"
+      _pm_run run tsc
     else if test -f ./tsconfig.json
-      printf "$cyan%s$reset\n" "npx tsc --noEmit"
-      npx tsc --noEmit
+      printf "$cyan%s$reset\n" "Running tsc --noEmit"
+      _pm_exec tsc --noEmit
     else
       echo "No typecheck, tsc script, or tsconfig.json found"
     end

@@ -47,6 +47,7 @@ function all_npm_projects_install
     set -l project_dir $argv[1]
     set -l package_path $argv[2]
     set -l use_legacy $argv[3]
+    set -l pm $argv[4]
     set -l install_status 0
 
     # Create relative path from the Development folder
@@ -54,31 +55,48 @@ function all_npm_projects_install
 
     pushd $project_dir
 
-    # If it's a sub-package in a workspace, use -w flag
+    # If it's a sub-package in a workspace, use workspace flag
     if test "$package_path" != "."
       set relative_path (string replace "$project_dir/" "" "$package_path")
 
       if test "$dry_run" = "true"
-        if test "$use_legacy" = "true"
-          echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install -w $relative_path $dependency --legacy-peer-deps"(set_color normal)
-        else
-          echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install -w $relative_path $dependency"(set_color normal)
+        switch $pm
+          case pnpm
+            echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "pnpm --filter $relative_path add $dependency"(set_color normal)
+          case bun
+            echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "bun add (in $relative_path)"(set_color normal)
+          case '*'
+            if test "$use_legacy" = "true"
+              echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install -w $relative_path $dependency --legacy-peer-deps"(set_color normal)
+            else
+              echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install -w $relative_path $dependency"(set_color normal)
+            end
         end
         set install_status 0
-        # Add to successful installations with relative path
         set -ga install_locations "$rel_project_dir ($relative_path)"
       else
-        if test "$use_legacy" = "true"
-          echo (set_color magenta)"📦 Installing with -w and --legacy-peer-deps..."(set_color normal)
-          npm install -w $relative_path $dependency --legacy-peer-deps
-          set install_status $status
-        else
-          echo (set_color magenta)"📦 Installing with -w..."(set_color normal)
-          npm install -w $relative_path $dependency
-          set install_status $status
+        switch $pm
+          case pnpm
+            echo (set_color magenta)"📦 Installing with pnpm --filter..."(set_color normal)
+            pnpm --filter $relative_path add $dependency
+            set install_status $status
+          case bun
+            # bun workspace add not well supported; fall back to npm
+            echo (set_color magenta)"📦 Installing with npm workspace (bun fallback)..."(set_color normal)
+            npm install -w $relative_path $dependency
+            set install_status $status
+          case '*'
+            if test "$use_legacy" = "true"
+              echo (set_color magenta)"📦 Installing with -w and --legacy-peer-deps..."(set_color normal)
+              npm install -w $relative_path $dependency --legacy-peer-deps
+              set install_status $status
+            else
+              echo (set_color magenta)"📦 Installing with -w..."(set_color normal)
+              npm install -w $relative_path $dependency
+              set install_status $status
+            end
         end
 
-        # Add to successful installations if install was successful
         if test $install_status -eq 0
           set -ga install_locations "$rel_project_dir ($relative_path)"
         end
@@ -86,26 +104,42 @@ function all_npm_projects_install
     else
       # Regular install at root level
       if test "$dry_run" = "true"
-        if test "$use_legacy" = "true"
-          echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install $dependency --legacy-peer-deps"(set_color normal)
-        else
-          echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install $dependency"(set_color normal)
+        switch $pm
+          case pnpm
+            echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "pnpm add $dependency"(set_color normal)
+          case bun
+            echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "bun add $dependency"(set_color normal)
+          case '*'
+            if test "$use_legacy" = "true"
+              echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install $dependency --legacy-peer-deps"(set_color normal)
+            else
+              echo (set_color cyan)"🧪 Would install with:"(set_color yellow) "npm install $dependency"(set_color normal)
+            end
         end
         set install_status 0
-        # Add to successful installations
         set -ga install_locations "$rel_project_dir"
       else
-        if test "$use_legacy" = "true"
-          echo (set_color magenta)"📦 Installing with --legacy-peer-deps..."(set_color normal)
-          npm install $dependency --legacy-peer-deps
-          set install_status $status
-        else
-          echo (set_color magenta)"📦 Installing..."(set_color normal)
-          npm install $dependency
-          set install_status $status
+        switch $pm
+          case pnpm
+            echo (set_color magenta)"📦 Installing with pnpm..."(set_color normal)
+            pnpm add $dependency
+            set install_status $status
+          case bun
+            echo (set_color magenta)"📦 Installing with bun..."(set_color normal)
+            bun add $dependency
+            set install_status $status
+          case '*'
+            if test "$use_legacy" = "true"
+              echo (set_color magenta)"📦 Installing with --legacy-peer-deps..."(set_color normal)
+              npm install $dependency --legacy-peer-deps
+              set install_status $status
+            else
+              echo (set_color magenta)"📦 Installing..."(set_color normal)
+              npm install $dependency
+              set install_status $status
+            end
         end
 
-        # Add to successful installations if install was successful
         if test $install_status -eq 0
           set -ga install_locations "$rel_project_dir"
         end
@@ -273,18 +307,24 @@ function all_npm_projects_install
         end
       end
 
+      # Detect PM for this project root to drive install and retry logic
+      set -l pm (_pm_detect $project_root)
+
       if test "$dry_run" = "true"
-        perform_install $project_root $package_path "false"
-        add_legacy_peer_deps_to_npmrc $project_root
+        perform_install $project_root $package_path "false" $pm
+        # Only show legacy-peer-deps warning for npm repos
+        if test "$pm" = npm
+          add_legacy_peer_deps_to_npmrc $project_root
+        end
       else
-        # Try installing without --legacy-peer-deps first
-        perform_install $project_root $package_path "false"
+        # Try installing first
+        perform_install $project_root $package_path "false" $pm
         set install_status $status
 
-        # If the install failed, retry with --legacy-peer-deps
-        if test $install_status -ne 0
+        # Retry with --legacy-peer-deps only applies to npm repos
+        if test $install_status -ne 0; and test "$pm" = npm
           echo (set_color yellow)"⚠️ Initial install failed, retrying with --legacy-peer-deps..."(set_color normal)
-          perform_install $project_root $package_path "true"
+          perform_install $project_root $package_path "true" $pm
           set install_status $status
 
           # If legacy peer deps worked, add it to .npmrc
@@ -297,7 +337,7 @@ function all_npm_projects_install
     end
   end
 
-  # Check for workspace roots that need an additional npm install
+  # Check for workspace roots that need an additional install
   for i in (seq 1 2 (count $workspace_dependency_map))
     set workspace_root $workspace_dependency_map[$i]
     set subpackages $workspace_dependency_map[(math $i + 1)]
@@ -305,16 +345,17 @@ function all_npm_projects_install
     # If both the workspace root and at least one subpackage have the dependency
     if test -n "$subpackages" && contains "$workspace_root" $install_locations
       set rel_workspace_root (string replace "$base_dir/" "" "$workspace_root")
+      set -l ws_pm (_pm_detect $workspace_root)
 
       if test "$dry_run" = "true"
-        echo (set_color cyan)"🧪 Would run"(set_color yellow) "npm install"(set_color cyan) "at workspace root:"(set_color normal) "~/Development/$rel_workspace_root"
+        echo (set_color cyan)"🧪 Would run"(set_color yellow) "$ws_pm install"(set_color cyan) "at workspace root:"(set_color normal) "~/Development/$rel_workspace_root"
         echo (set_color cyan)"   (Both workspace root and subpackage(s) have the dependency)"(set_color normal)
       else
-        echo (set_color magenta)"📦 Running npm install at workspace root:"(set_color normal) "~/Development/$rel_workspace_root"
+        echo (set_color magenta)"📦 Running $ws_pm install at workspace root:"(set_color normal) "~/Development/$rel_workspace_root"
         echo (set_color magenta)"   (Both workspace root and subpackage(s) have the dependency)"(set_color normal)
 
         pushd $workspace_root
-        npm install
+        _pm_run i
         popd
       end
     end

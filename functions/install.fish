@@ -1,9 +1,9 @@
 function install
   if test -f ./package.json
     if test (contains -- --clean $argv)
-      npm ci
+      _pm_run ci
     else
-      npm i
+      _pm_run i
     end
   else if test -f ./Gemfile
     bundle install
