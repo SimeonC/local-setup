@@ -86,7 +86,7 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
     # host path so git can follow the gitdir chain inside the container.
     set -l worktree_main_repo ""
     set -l override_config_file ""
-    if test -f "$workspace/.git"
+    if _is_git_worktree $workspace
         set -l gitdir_line (cat "$workspace/.git")
         set -l gitdir_path (string replace 'gitdir: ' '' -- $gitdir_line)
         # Resolve the common (main repo) .git dir
@@ -112,7 +112,7 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
             for sibling in $workspace_parent/*/
                 set -l sib_name (basename $sibling)
                 test "$sib_name" = "$repo_basename"; and continue  # skip self (covered by devcontainer.json volume)
-                test -e "$sibling/.git"; or continue               # skip non-repos (bare node_modules, etc.)
+                _is_git_repo $sibling; or continue                 # skip non-repos (bare node_modules, etc.)
                 set -a extra_args --mount "type=volume,source=dco-$parent_name-$sib_name-node-modules,target=/workspaces/$parent_name/$sib_name/node_modules"
             end
             # Generate override config with correct workspaceFolder for nested path
