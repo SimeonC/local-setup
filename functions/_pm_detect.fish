@@ -6,7 +6,7 @@ function _pm_detect
     else
         set -l search_dir $PWD
     end
-    while test "$search_dir" != /
+    while test -n "$search_dir"; and test "$search_dir" != /
         if test -f "$search_dir/package.json"
             if test -f "$search_dir/pnpm-lock.yaml"
                 echo pnpm

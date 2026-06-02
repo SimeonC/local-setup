@@ -206,8 +206,8 @@ function all_npm_projects_install
     set project_name (basename $project_dir)
     echo (set_color cyan)"🔍 Checking"(set_color --bold) $project_name(set_color normal)
 
-    # Check if it's a git repository
-    if test -d "$project_dir/.git"
+    # Check if it's a git repository (handles both regular repos and worktrees)
+    if _is_git_repo $project_dir
       # Use git ls-files to respect .gitignore
       pushd $project_dir
       set git_pkg_files (git ls-files --cached --others --exclude-standard "**/package.json" "package.json" 2>/dev/null)
