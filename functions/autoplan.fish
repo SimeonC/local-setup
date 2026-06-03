@@ -365,7 +365,10 @@ $gate_result"
                     for vc in $verify_cmds
                         echo ""
                         echo "▶ verify_cmd: $vc"
-                        CI=true eval $vc >./tmp/autoplan-verify-cmd-raw.txt 2>&1
+                        begin
+                            set -lx CI true
+                            eval $vc
+                        end >./tmp/autoplan-verify-cmd-raw.txt 2>&1
                         set vc_failed_status $status
                         cat ./tmp/autoplan-verify-cmd-raw.txt
                         if test $vc_failed_status -ne 0
@@ -635,7 +638,10 @@ function __autoplan_run_tests --argument-names test_cmd output_file manual_test_
             set cmd (string trim $cmd)
             test -z "$cmd"; and continue
             echo "▶ $cmd" | tee -a $output_file
-            CI=true eval $cmd 2>&1 | tee -a $output_file
+            begin
+                set -lx CI true
+                eval $cmd
+            end 2>&1 | tee -a $output_file
             if test $pipestatus[1] -ne 0
                 return 1
             end
