@@ -69,6 +69,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         set pr_title (__autoplan_frontmatter $current_plan pr_title)
     end
     set -l prompts_path (__autoplan_frontmatter $current_plan prompts)
+    set -l env_files (__autoplan_frontmatter_list $current_plan env_files)
     set -l manual_test_file (__autoplan_frontmatter $current_plan manual_test)
     if test -n "$manual_test_file"
         if not string match -q '/*' $manual_test_file
@@ -90,6 +91,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     end
     if test -z "$test_cmd" -a -z "$manual_test_file"
         echo "Error: Plan file must have test_cmd, manual_test, or both." >&2
+        return 1
+    end
+    if test (count $env_files) -gt 0; and not type -q dotenvx
+        echo "Error: Plan uses env_files but dotenvx is not installed. Install with: brew install dotenvx/brew/dotenvx" >&2
         return 1
     end
     if test -n "$prompts_path"
@@ -134,6 +139,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set prompts_path (dirname $current_plan)/$plan_prompts
             else
                 set prompts_path $plan_prompts
+            end
+        end
+        set -l plan_env_files (__autoplan_frontmatter_list $current_plan env_files)
+        if test (count $plan_env_files) -gt 0
+            set env_files $plan_env_files
+            if not type -q dotenvx
+                echo "Error: Plan uses env_files but dotenvx is not installed. Install with: brew install dotenvx/brew/dotenvx" >&2
+                return 1
             end
         end
         set -l plan_manual_test (__autoplan_frontmatter $current_plan manual_test)
@@ -232,7 +245,7 @@ $gate_result"
                 echo ""
                 echo "🧪 Running tests..."
 
-                if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file"
+                if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file" $env_files
                     echo "✅ Tests pass."
                     break
                 else
@@ -319,7 +332,7 @@ $gate_result"
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
 
-                        if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file"
+                        if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file" $env_files
                             echo "✅ Tests pass."
                             break
                         else
@@ -358,16 +371,17 @@ $gate_result"
 
             set -l verify_cmds (__autoplan_frontmatter_list $current_plan verify_cmds)
             if test (count $verify_cmds) -gt 0
+                set -l vc_env_prefix (__autoplan_env_prefix $env_files | string collect --allow-empty)
                 set -l vc_attempt 0
                 while true
                     set -l vc_failed_cmd ""
                     set -l vc_failed_status 0
                     for vc in $verify_cmds
                         echo ""
-                        echo "▶ verify_cmd: $vc"
+                        echo "▶ verify_cmd: $vc_env_prefix$vc"
                         begin
                             set -lx CI true
-                            eval $vc
+                            eval $vc_env_prefix$vc
                         end >./tmp/autoplan-verify-cmd-raw.txt 2>&1
                         set vc_failed_status $status
                         cat ./tmp/autoplan-verify-cmd-raw.txt
@@ -629,7 +643,8 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
         | string replace -a -- '$VERIFY_CMD_LOG' './tmp/autoplan-verify-cmd-output.txt'
 end
 
-function __autoplan_run_tests --argument-names test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test"
+function __autoplan_run_tests --argument-names test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test; extra args are env_files for dotenvx"
+    set -l env_prefix (__autoplan_env_prefix $argv[4..-1] | string collect --allow-empty)
     echo -n >$output_file
     if test -n "$test_cmd"
         echo "# Auto Tests" >>$output_file
@@ -637,11 +652,8 @@ function __autoplan_run_tests --argument-names test_cmd output_file manual_test_
         for cmd in (string split '&&' -- $test_cmd)
             set cmd (string trim $cmd)
             test -z "$cmd"; and continue
-            echo "▶ $cmd" | tee -a $output_file
-            begin
-                set -lx CI true
-                eval $cmd
-            end 2>&1 | tee -a $output_file
+            echo "▶ $env_prefix$cmd" | tee -a $output_file
+            eval $env_prefix$cmd 2>&1 | tee -a $output_file
             if test $pipestatus[1] -ne 0
                 return 1
             end
@@ -658,6 +670,17 @@ function __autoplan_run_tests --argument-names test_cmd output_file manual_test_
         end
     end
     return 0
+end
+
+function __autoplan_env_prefix --description "Build a 'dotenvx run -f … -- ' command prefix from env file paths (empty if none)"
+    if test (count $argv) -eq 0
+        return
+    end
+    set -l flags
+    for f in $argv
+        set -a flags "-f $f"
+    end
+    echo "dotenvx run $flags -- "
 end
 
 function __autoplan_save_state --argument-names plan phase branch pr_title

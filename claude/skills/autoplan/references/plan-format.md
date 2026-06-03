@@ -14,9 +14,15 @@ verify_cmds:                # optional — YAML list of deterministic shell comm
   - npm run lint:fix
   - npm run check
   - npm run test:unit
+env_files:                  # optional — YAML list of dotenv files loaded (via dotenvx) for test_cmd and verify_cmds
+  - .semaphore/deployEnvironments/.staging-qa.env
 next: ./<slug>-2.md         # optional — next plan in chain
 ---
 ```
+
+### env_files: Env Files for Harness-Run Commands
+
+`env_files` is an optional YAML list of dotenv file paths, resolved relative to the directory autoplan runs from (the repo root), NOT the plan file. When set, the harness wraps every `test_cmd` segment and every `verify_cmds` entry as `dotenvx run -f <f1> -f <f2> -- <cmd>`. Requires `dotenvx` (`brew install dotenvx/brew/dotenvx`). Variables already set in the environment win over file values. Note that `verify_cmds` run with `CI=true` exported (non-interactive lint/build/test), whereas `test_cmd` runs without it. Reference existing env files where possible rather than creating new ones.
 
 ### verify_cmds: Deterministic Verification Commands
 
@@ -30,7 +36,7 @@ next: ./<slug>-2.md         # optional — next plan in chain
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
 - **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `next`, `pr_title`, and `manual_test` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory.
+All fields except `next`, `pr_title`, `manual_test`, and `env_files` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
 
 ## Body Sections
 
