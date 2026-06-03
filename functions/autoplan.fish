@@ -515,14 +515,14 @@ $gate_result"
 
             command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$cr_orch"
 
-            set -l pr_body (cat ./tmp/autoplan-pr-body.txt 2>/dev/null)
-
             git push origin $branch
 
-            if gh pr view $branch >/dev/null 2>&1
+            if not test -s ./tmp/autoplan-pr-body.txt
+                echo "⚠️  PR body not generated (./tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
+            else if gh pr view $branch >/dev/null 2>&1
                 echo "PR already exists for $branch."
             else
-                gh pr create --title "$pr_title" --body "$pr_body"
+                gh pr create --title "$pr_title" --body-file ./tmp/autoplan-pr-body.txt
             end
         else
             # No pr_title — run chain-review only (no PR body sub-agent).

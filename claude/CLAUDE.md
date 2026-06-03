@@ -36,7 +36,6 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 ## Code Quality
 
-- **Always adhere to SOLID principles** (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion) when writing or modifying code.
 - **Always use `/tdd` skill** whenever a task involves code changes — run it before writing implementation code.
 
 ## Pull Requests

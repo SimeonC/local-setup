@@ -156,9 +156,25 @@ Consider using context instead of declaring state in a shared module. This will 
 
 Use `createContext` rather than `setContext` and `getContext`, as it provides type safety.
 
+## Declaration tags in templates
+
+Since Svelte 5.56, you can declare reactive variables inline in markup using `{let ...}` and `{const ...}` tags:
+
+```svelte
+{let count = $state(0)}
+{const double = $derived(count * 2)}
+<button onclick={() => count++}>{count} × 2 = {double}</button>
+```
+
+See [references/declaration-tags.md](references/declaration-tags.md) for full syntax and scope rules.
+
+- Prefer `{let x = $state(0)}` / `{const y = $derived(x*2)}` over `{@const}` when you need reactive state or derived values inside markup.
+- `{@const}` remains valid for non-reactive computed constants inside `{#each}` or `{#if}` blocks.
+- Declarators in the same `{let}` / `{const}` tag can reference each other left-to-right; duplicate names cause a compile-time error.
+
 ## Async Svelte
 
-If using version 5.36 or higher, you can use [await expressions](references/await-expressions.md) and [hydratable](references/hydratable.md) to use promises directly inside components. Note that these require the `experimental.async` option to be enabled in `svelte.config.js` as they are not yet considered fully stable.
+As of Svelte 5.56, [await expressions](references/await-expressions.md) and [hydratable](references/hydratable.md) remain experimental. They require the `experimental.async` option to be enabled in `svelte.config.js` and are not yet considered fully stable.
 
 ## Avoid legacy features
 

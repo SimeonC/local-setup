@@ -83,6 +83,7 @@ Rules:
 - Only enough code to pass current test
 - Don't anticipate future tests
 - Keep tests focused on observable behavior
+- **Scope test runs to the file(s) being edited** (pass a file path or test name filter). Only widen to the full suite once targeted tests pass.
 
 ### 4. Refactor
 
@@ -90,7 +91,7 @@ After all tests pass, look for [refactor candidates](refactoring.md):
 
 - [ ] Extract duplication
 - [ ] Deepen modules (move complexity behind simple interfaces)
-- [ ] Apply SOLID principles where natural
+- [ ] Apply SOLID principles (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion) where natural
 - [ ] Consider what new code reveals about existing code
 - [ ] Run tests after each refactor step
 
