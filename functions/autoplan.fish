@@ -1,4 +1,10 @@
 function autoplan --description "Iterative TDD loop driven by a linked list of markdown plan files"
+    # Re-launch inside tmux if not already running in a tmux session
+    if not set -q TMUX
+        set -l escaped_args (string escape -- $argv)
+        exec tmux new-session fish -c "autoplan $escaped_args"
+    end
+
     argparse 'max-fix-attempts=' 'max-verify-passes=' 'resume' 'continue' -- $argv
 
     if set -q _flag_continue
