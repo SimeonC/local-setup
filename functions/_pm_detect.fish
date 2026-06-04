@@ -1,10 +1,9 @@
 function _pm_detect
     # Detect package manager from lockfile. Accepts optional dir arg, defaults to $PWD.
     # Walks up from dir to find nearest package.json, then checks lockfiles there.
+    set -l search_dir $PWD
     if test (count $argv) -gt 0
-        set -l search_dir $argv[1]
-    else
-        set -l search_dir $PWD
+        set search_dir $argv[1]
     end
     while test -n "$search_dir"; and test "$search_dir" != /
         if test -f "$search_dir/package.json"
