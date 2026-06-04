@@ -30,6 +30,7 @@ end
 # PATH (fast - direct instead of repeated appends)
 fish_add_path --prepend $HOME/.grit/bin
 fish_add_path --append /opt/homebrew/bin
+fish_add_path --append /opt/homebrew/sbin
 fish_add_path --append ~/.local/bin
 # fish_add_path automaticall resolves the path to the absolute path, we don't want that
 set -gx PATH ./node_modules/.bin $PATH
