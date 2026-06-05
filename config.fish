@@ -103,3 +103,10 @@ set -gx PATH $PATH /Users/simeoncheeseman/.lmstudio/bin
 
 # opencode
 fish_add_path /Users/simeoncheeseman/.opencode/bin
+
+# pnpm
+set -gx PNPM_HOME "/Users/simeoncheeseman/Library/pnpm"
+if not string match -q -- "$PNPM_HOME/bin" $PATH
+  set -gx PATH "$PNPM_HOME/bin" $PATH
+end
+# pnpm end

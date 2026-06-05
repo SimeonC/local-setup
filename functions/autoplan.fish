@@ -5,15 +5,18 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         exec tmux new-session fish -c "autoplan $escaped_args"
     end
 
-    argparse 'max-fix-attempts=' 'max-verify-passes=' 'resume' 'continue' -- $argv
+    argparse 'max-fix-attempts=' 'max-verify-passes=' 'continue' -- $argv
+
+    # Run-root anchoring: all state/tmp paths are relative to where autoplan is launched
+    set -g __autoplan_root $PWD
 
     if set -q _flag_continue
-        if not test -f .autoplan-progress
+        if not test -f $__autoplan_root/.autoplan-progress
             echo "Error: No .autoplan-progress file found. Cannot --continue without it." >&2
             return 1
         end
     else if test (count $argv) -eq 0
-        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--resume] [--continue]" >&2
+        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--continue]" >&2
         return 1
     end
 
@@ -32,7 +35,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     end
 
     # ===== SETUP =====
-    set -l branch ""
     set -l current_plan ""
     set -l pr_title ""
     # Clear any stale global skip_to_phase from a previous run in this session
@@ -40,21 +42,13 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
     if set -q _flag_continue
         # Load state from .autoplan-progress
-        for _line in (cat .autoplan-progress)
+        for _line in (cat $__autoplan_root/.autoplan-progress)
             set -l _parts (string split -m 1 '=' $_line)
             switch $_parts[1]
                 case plan;      set current_plan $_parts[2]
                 case phase;     set -g skip_to_phase $_parts[2]
-                case branch;    set branch $_parts[2]
                 case pr_title;  set pr_title $_parts[2]
             end
-        end
-        if not git show-ref --verify --quiet refs/heads/$branch
-            echo "Error: Branch $branch not found in local refs." >&2
-            return 1
-        end
-        if test (git branch --show-current) != $branch
-            git checkout $branch
         end
     else
         set current_plan (realpath $argv[1])
@@ -81,14 +75,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
     end
 
-    if test -z "$branch"
-        set branch (__autoplan_frontmatter $current_plan branch)
-    end
-
-    if test -z "$branch"
-        echo "Error: Plan file missing required frontmatter key: branch" >&2
-        return 1
-    end
     if test -z "$test_cmd" -a -z "$manual_test_file"
         echo "Error: Plan file must have test_cmd, manual_test, or both." >&2
         return 1
@@ -103,20 +89,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
     end
 
-    if not set -q _flag_resume; and not set -q _flag_continue
-        if git show-ref --verify --quiet refs/heads/$branch
-            echo "Branch $branch already exists. Use --resume to continue." >&2
-            return 1
-        end
-        if not git diff --quiet HEAD
-            echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
-            return 1
-        end
-        git fetch origin main
-        git checkout --no-track -b $branch origin/main
-    end
-
-    mkdir -p ./tmp
+    mkdir -p $__autoplan_root/tmp
 
     set -l base_system_prompt (__autoplan_compose_system base)
     set -l implement_system_prompt     (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity refactor-confirm implement)
@@ -158,6 +131,68 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             end
         end
 
+        # ===== PER-PLAN CWD + BRANCH =====
+
+        # Resolve cwd: relative paths are anchored to the run root
+        set -l plan_cwd_raw (__autoplan_frontmatter $current_plan cwd)
+        if test -z "$plan_cwd_raw"
+            set plan_cwd_raw .
+        end
+        set -l plan_cwd
+        if string match -q '/*' $plan_cwd_raw
+            set plan_cwd $plan_cwd_raw
+        else
+            set plan_cwd $__autoplan_root/$plan_cwd_raw
+        end
+        set plan_cwd (realpath $plan_cwd 2>/dev/null)
+        if not test -d "$plan_cwd"
+            echo "Error: cwd '$plan_cwd_raw' not found for plan $current_plan" >&2
+            return 1
+        end
+        cd $plan_cwd
+
+        # Re-read branch per plan
+        set -l branch (__autoplan_frontmatter $current_plan branch)
+        if test -z "$branch"
+            echo "Error: Plan file missing required frontmatter key: branch" >&2
+            return 1
+        end
+
+        # Read create_branch (default true)
+        set -l create_branch_val (__autoplan_frontmatter $current_plan create_branch)
+        set -l do_create_branch true
+        if test "$create_branch_val" = false
+            set do_create_branch false
+        end
+
+        # Branch resolution
+        if git show-ref --verify --quiet refs/heads/$branch
+            # Branch exists locally — checkout if not current
+            if test (git branch --show-current) != $branch
+                git checkout $branch
+            end
+        else if not set -q skip_to_phase; and test "$do_create_branch" = true
+            # New branch: guard dirty tree, then create from origin/main
+            if not git diff --quiet HEAD
+                echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
+                return 1
+            end
+            git fetch origin main
+            git checkout --no-track -b $branch origin/main
+        else if not set -q skip_to_phase; and test "$do_create_branch" = false
+            echo "Error: Branch $branch not found locally and create_branch: false" >&2
+            return 1
+        else
+            echo "Error: Branch $branch not found locally (expected when resuming)" >&2
+            return 1
+        end
+
+        # Assert we are on the correct branch before proceeding
+        if test (git branch --show-current) != $branch
+            echo "Error: Repo is on branch '$(git branch --show-current)' but plan requires '$branch'. Switch manually." >&2
+            return 1
+        end
+
         set -l plan_desc (__autoplan_frontmatter $current_plan description)
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -169,15 +204,15 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # ===== GATE + IMPLEMENT (combined orchestrator) =====
         if not __autoplan_check_skip gate_implement
-            __autoplan_save_state $current_plan gate_implement $branch $pr_title
+            __autoplan_save_state $current_plan gate_implement $pr_title
             echo "🔍 Gate + Implement orchestrator..."
 
-            rm -f ./tmp/autoplan-gate-result.txt ./tmp/autoplan-gate-summary.txt
+            rm -f $__autoplan_root/tmp/autoplan-gate-result.txt $__autoplan_root/tmp/autoplan-gate-summary.txt
 
             set -l gate_sub (cat "$HOME/.claude/skills/autoplan/references/gate-prompt.md" \
                 | string replace -a -- '$PLAN_FILE' "$current_plan" \
-                | string replace -a -- '$GATE_RESULT' './tmp/autoplan-gate-result.txt' \
-                | string replace -a -- '$GATE_SUMMARY' './tmp/autoplan-gate-summary.txt')
+                | string replace -a -- '$GATE_RESULT' "$__autoplan_root/tmp/autoplan-gate-result.txt" \
+                | string replace -a -- '$GATE_SUMMARY' "$__autoplan_root/tmp/autoplan-gate-summary.txt")
 
             set -l impl_sub (__autoplan_build_user_prompt \
                 implement-prompt.md DOMAIN_IMPLEMENT implement \
@@ -195,15 +230,15 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             set_color --bold
             echo "📋 Gate Summary"
             set_color normal
-            if test -f ./tmp/autoplan-gate-summary.txt
-                cat ./tmp/autoplan-gate-summary.txt
+            if test -f $__autoplan_root/tmp/autoplan-gate-summary.txt
+                cat $__autoplan_root/tmp/autoplan-gate-summary.txt
             else
                 echo "(no summary file written)"
             end
 
             set -l gate_result ""
-            if test -f ./tmp/autoplan-gate-result.txt
-                set gate_result (head -1 ./tmp/autoplan-gate-result.txt | string trim)
+            if test -f $__autoplan_root/tmp/autoplan-gate-result.txt
+                set gate_result (head -1 $__autoplan_root/tmp/autoplan-gate-result.txt | string trim)
             end
 
             set_color --bold
@@ -223,7 +258,7 @@ Branch: $branch
 The plan cannot be made automatically executable. Read the gate summary below, then help the user revise the plan file so a future autoplan run can proceed. Do NOT implement the plan — only edit the plan file (and prompts file if relevant). After edits, the user will re-run \`autoplan --continue\`.
 
 ## Gate Summary
-"(cat ./tmp/autoplan-gate-summary.txt 2>/dev/null)"
+"(cat $__autoplan_root/tmp/autoplan-gate-summary.txt 2>/dev/null)"
 
 ## Gate Result
 $gate_result"
@@ -238,21 +273,21 @@ $gate_result"
 
         # ===== TEST/FIX LOOP =====
         if not __autoplan_check_skip test_fix
-            __autoplan_save_state $current_plan test_fix $branch $pr_title
+            __autoplan_save_state $current_plan test_fix $pr_title
             set -l fix_attempt 0
 
             while true
                 echo ""
                 echo "🧪 Running tests..."
 
-                if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file" $env_files
+                if __autoplan_run_tests "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
                     echo "✅ Tests pass."
                     break
                 else
                     set fix_attempt (math $fix_attempt + 1)
                     if test $fix_attempt -ge $max_fix_attempts
                         echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
-                        echo "Test output: ./tmp/autoplan-test-output.txt" >&2
+                        echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
                         read -P "Continue cycling fix attempts? [y/N] " -l _continue_fix
                         if string match -qi 'y*' $_continue_fix
                             set fix_attempt 0
@@ -274,7 +309,7 @@ $gate_result"
 
         # ===== HARDEN + VERIFY (separate invocations with fix loop) =====
         if not __autoplan_check_skip harden_verify
-            __autoplan_save_state $current_plan harden_verify $branch $pr_title
+            __autoplan_save_state $current_plan harden_verify $pr_title
             set -l verify_pass 0
 
             while true
@@ -292,7 +327,7 @@ $gate_result"
                 echo ""
                 echo "🔨 Harden (pass $verify_pass/$max_verify_passes)..."
 
-                rm -f ./tmp/autoplan-verify-result.txt
+                rm -f $__autoplan_root/tmp/autoplan-verify-result.txt
 
                 set -l harden_sub (__autoplan_build_user_prompt \
                     harden-prompt.md DOMAIN_HARDEN harden \
@@ -309,15 +344,15 @@ $gate_result"
 
                 command claude --permission-mode $permission_mode --append-system-prompt "$verify_system_prompt" "$verify_sub"
 
-                if not test -f ./tmp/autoplan-verify-result.txt
+                if not test -f $__autoplan_root/tmp/autoplan-verify-result.txt
                     echo "❌ Verify did not write sentinel file." >&2
                     return 1
                 end
 
-                if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
+                if head -1 $__autoplan_root/tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
                     echo "✅ Verify passed."
                     break
-                else if head -1 ./tmp/autoplan-verify-result.txt | string match -qr '^ISSUES_FOUND'
+                else if head -1 $__autoplan_root/tmp/autoplan-verify-result.txt | string match -qr '^ISSUES_FOUND'
                     echo "⚠️  Verify found issues. Fixing..."
 
                     set -l fix_verify_prompt (__autoplan_build_user_prompt \
@@ -332,14 +367,14 @@ $gate_result"
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
 
-                        if __autoplan_run_tests "$test_cmd" ./tmp/autoplan-test-output.txt "$manual_test_file" $env_files
+                        if __autoplan_run_tests "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
                             echo "✅ Tests pass."
                             break
                         else
                             set fix_attempt (math $fix_attempt + 1)
                             if test $fix_attempt -ge $max_fix_attempts
                                 echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
-                                echo "Test output: ./tmp/autoplan-test-output.txt" >&2
+                                echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
                                 read -P "Continue cycling fix attempts? [y/N] " -l _continue_fix
                                 if string match -qi 'y*' $_continue_fix
                                     set fix_attempt 0
@@ -367,7 +402,7 @@ $gate_result"
 
         # ===== VERIFY_CMDS (deterministic harness-driven checks) =====
         if not __autoplan_check_skip verify_cmds
-            __autoplan_save_state $current_plan verify_cmds $branch $pr_title
+            __autoplan_save_state $current_plan verify_cmds $pr_title
 
             set -l verify_cmds (__autoplan_frontmatter_list $current_plan verify_cmds)
             if test (count $verify_cmds) -gt 0
@@ -382,9 +417,9 @@ $gate_result"
                         begin
                             set -lx CI true
                             eval $vc_env_prefix$vc
-                        end >./tmp/autoplan-verify-cmd-raw.txt 2>&1
+                        end >$__autoplan_root/tmp/autoplan-verify-cmd-raw.txt 2>&1
                         set vc_failed_status $status
-                        cat ./tmp/autoplan-verify-cmd-raw.txt
+                        cat $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
                         if test $vc_failed_status -ne 0
                             set vc_failed_cmd $vc
                             break
@@ -393,14 +428,14 @@ $gate_result"
 
                     if test -z "$vc_failed_cmd"
                         echo "✅ verify_cmds all passed."
-                        rm -f ./tmp/autoplan-verify-cmd-raw.txt
+                        rm -f $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
                         break
                     end
 
                     set vc_attempt (math $vc_attempt + 1)
                     if test $vc_attempt -ge $max_fix_attempts
                         echo "⚠️  verify_cmd '$vc_failed_cmd' still failing after $max_fix_attempts fix attempts." >&2
-                        echo "Log: ./tmp/autoplan-verify-cmd-output.txt" >&2
+                        echo "Log: $__autoplan_root/tmp/autoplan-verify-cmd-output.txt" >&2
                         read -P "Continue cycling fix attempts? [y/N] " -l _continue_vc
                         if string match -qi 'y*' $_continue_vc
                             set vc_attempt 0
@@ -409,12 +444,12 @@ $gate_result"
                         end
                     end
 
-                    echo "## Failing command" >./tmp/autoplan-verify-cmd-output.txt
-                    echo "$vc_failed_cmd" >>./tmp/autoplan-verify-cmd-output.txt
-                    echo "" >>./tmp/autoplan-verify-cmd-output.txt
-                    echo "## Output" >>./tmp/autoplan-verify-cmd-output.txt
-                    cat ./tmp/autoplan-verify-cmd-raw.txt >>./tmp/autoplan-verify-cmd-output.txt
-                    rm -f ./tmp/autoplan-verify-cmd-raw.txt
+                    echo "## Failing command" >$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                    echo "$vc_failed_cmd" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                    echo "" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                    echo "## Output" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                    cat $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                    rm -f $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
 
                     echo "⚠️  verify_cmd failing (attempt $vc_attempt/$max_fix_attempts). Fixing..."
 
@@ -427,49 +462,53 @@ $gate_result"
             end
         end
 
-        # Delete manual_test instructions file so commit picks up the deletion
+        # ===== PRE-COMMIT CLEANUP =====
+        # Determine if the prompts file is safe to delete (not shared with other plans)
+        set -l plan_dir (dirname $current_plan)
+        set -l should_delete false
+        if test -n "$prompts_path" -a -f "$prompts_path"
+            set should_delete true
+            set -l canonical_prompts (realpath $prompts_path)
+            for f in $plan_dir/*.md
+                test (realpath $f) = (realpath $current_plan); and continue
+                set -l other_prompts (__autoplan_frontmatter $f prompts)
+                test -z "$other_prompts"; and continue
+                if not string match -q '/*' $other_prompts
+                    set other_prompts (dirname $f)/$other_prompts
+                end
+                if test (realpath $other_prompts 2>/dev/null) = "$canonical_prompts"
+                    set should_delete false
+                    break
+                end
+            end
+        end
+
+        # Save next plan path BEFORE deleting plan file
+        set -l next_plan (__autoplan_frontmatter $current_plan next)
+
+        # Delete manual_test instructions file
         if test -n "$manual_test_file" -a -f "$manual_test_file"
             rm $manual_test_file
             echo "🗑  Removed manual test instructions: $manual_test_file"
         end
 
-        # Save next plan path BEFORE commit (commit may delete the plan file)
-        set -l next_plan (__autoplan_frontmatter $current_plan next)
+        # Delete plan and prompts files (live at run root, not in sub-repo; harness owns removal)
+        rm -f $current_plan
+        echo "🗑  Removed completed plan: $current_plan"
+        if test "$should_delete" = true
+            rm -f $prompts_path
+            echo "🗑  Removed prompts file: $prompts_path"
+        end
 
         # ===== COMMIT =====
         if not __autoplan_check_skip commit
-            __autoplan_save_state $current_plan commit $branch $pr_title
+            __autoplan_save_state $current_plan commit $pr_title
             echo ""
             echo "💾 Commit..."
-
-            set -l plan_dir (dirname $current_plan)
-            set -l should_delete false
-            if test -n "$prompts_path" -a -f "$prompts_path"
-                set should_delete true
-                set -l canonical_prompts (realpath $prompts_path)
-                for f in $plan_dir/*.md
-                    test (realpath $f) = (realpath $current_plan); and continue
-                    set -l other_prompts (__autoplan_frontmatter $f prompts)
-                    test -z "$other_prompts"; and continue
-                    if not string match -q '/*' $other_prompts
-                        set other_prompts (dirname $f)/$other_prompts
-                    end
-                    if test (realpath $other_prompts 2>/dev/null) = "$canonical_prompts"
-                        set should_delete false
-                        break
-                    end
-                end
-            end
-
-            set -l prompts_clean "Do not delete any prompts file."
-            if test "$should_delete" = true
-                set prompts_clean "Also delete the prompts file at $prompts_path."
-            end
 
             set -l commit_prompt (__autoplan_interpolate_prompt \
                 (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                 $current_plan $branch $test_cmd)
-            set commit_prompt (string replace -a -- '$PROMPTS_CLEAN' "$prompts_clean" $commit_prompt)
             command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
         end
 
@@ -486,21 +525,39 @@ $gate_result"
                 return 1
             end
             set current_plan $next_plan
+            cd $__autoplan_root
             # Update state so --continue resumes at the next plan's gate
-            __autoplan_save_state $current_plan gate_implement $branch $pr_title
+            __autoplan_save_state $current_plan gate_implement $pr_title
         else
             break
         end
     end
 
     # ===== CHAIN REVIEW + PR (combined orchestrator) =====
-    __autoplan_save_state $current_plan chain_review_pr $branch $pr_title
+    __autoplan_save_state $current_plan chain_review_pr $pr_title
     if not __autoplan_check_skip chain_review_pr
         echo ""
         echo "🔍🚀 Chain review + PR orchestrator..."
 
+        # Re-read branch and cd into the final plan's repo
+        set -l branch (__autoplan_frontmatter $current_plan branch)
+        set -l final_cwd_raw (__autoplan_frontmatter $current_plan cwd)
+        if test -z "$final_cwd_raw"
+            set final_cwd_raw .
+        end
+        set -l final_cwd
+        if string match -q '/*' $final_cwd_raw
+            set final_cwd $final_cwd_raw
+        else
+            set final_cwd $__autoplan_root/$final_cwd_raw
+        end
+        set final_cwd (realpath $final_cwd 2>/dev/null)
+        if test -d "$final_cwd"
+            cd $final_cwd
+        end
+
         set -l plan_dir (dirname $current_plan)
-        rm -f ./tmp/autoplan-pr-body.txt
+        rm -f $__autoplan_root/tmp/autoplan-pr-body.txt
 
         if test -n "$pr_title"
             set -l pr_body_sub (__autoplan_interpolate_prompt \
@@ -517,28 +574,22 @@ $gate_result"
 
             git push origin $branch
 
-            if not test -s ./tmp/autoplan-pr-body.txt
-                echo "⚠️  PR body not generated (./tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
+            if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
+                echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
             else if gh pr view $branch >/dev/null 2>&1
                 echo "PR already exists for $branch."
             else
-                gh pr create --title "$pr_title" --body-file ./tmp/autoplan-pr-body.txt
+                gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
             end
         else
-            # No pr_title — run chain-review only (no PR body sub-agent).
-            set -l review_only_prompt "Review the completed autoplan chain on branch `$branch` and clean up.
+            # No pr_title — run a git log summary in the final plan's repo (no PR, no cleanup needed)
+            set -l review_only_prompt "Review the completed autoplan chain on branch \`$branch\`.
 
-## Step 1: Review commits
+## Review commits
 Run: git log --oneline origin/main..$branch
-Cross-check each commit against the plan chain on branch `$branch` (commits in $plan_dir) to verify nothing was missed.
+Verify the commits look complete and nothing was obviously missed.
 
-## Step 2: Clean up leftover files
-Delete any remaining autoplan plan/prompts .md files in $plan_dir that were part of this chain.
-Do NOT delete files that aren't part of this autoplan chain.
-If there are files to delete, stage and commit them in a single commit with message:
-  🔥 Remove completed plan files
-
-## Step 3: Summary
+## Summary
 Print a brief summary of what was completed and flag anything that looks incomplete."
 
             command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$review_only_prompt"
@@ -547,8 +598,8 @@ Print a brief summary of what was completed and flag anything that looks incompl
     end
 
     # ===== CLEANUP =====
-    rm -f ./tmp/autoplan-*
-    rm -f .autoplan-progress
+    rm -f $__autoplan_root/tmp/autoplan-*
+    rm -f $__autoplan_root/.autoplan-progress
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -633,14 +684,14 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
 
     printf '%s\n' $prompt_lines \
         | string replace -a -- '$PLAN_FILE' "$plan_file" \
-        | string replace -a -- '$TEST_LOG' './tmp/autoplan-test-output.txt' \
-        | string replace -a -- '$VERIFY_LOG' './tmp/autoplan-verify-result.txt' \
+        | string replace -a -- '$TEST_LOG' "$__autoplan_root/tmp/autoplan-test-output.txt" \
+        | string replace -a -- '$VERIFY_LOG' "$__autoplan_root/tmp/autoplan-verify-result.txt" \
         | string replace -a -- '$BRANCH' "$branch_name" \
         | string replace -a -- '$TEST_CMD' "$test_cmd_val" \
-        | string replace -a -- '$GATE_LOG' './tmp/autoplan-gate-output.txt' \
-        | string replace -a -- '$GATE_RESULT' './tmp/autoplan-gate-result.txt' \
-        | string replace -a -- '$GATE_SUMMARY' './tmp/autoplan-gate-summary.txt' \
-        | string replace -a -- '$VERIFY_CMD_LOG' './tmp/autoplan-verify-cmd-output.txt'
+        | string replace -a -- '$GATE_LOG' "$__autoplan_root/tmp/autoplan-gate-output.txt" \
+        | string replace -a -- '$GATE_RESULT' "$__autoplan_root/tmp/autoplan-gate-result.txt" \
+        | string replace -a -- '$GATE_SUMMARY' "$__autoplan_root/tmp/autoplan-gate-summary.txt" \
+        | string replace -a -- '$VERIFY_CMD_LOG' "$__autoplan_root/tmp/autoplan-verify-cmd-output.txt"
 end
 
 function __autoplan_run_tests --argument-names test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test; extra args are env_files for dotenvx"
@@ -683,11 +734,10 @@ function __autoplan_env_prefix --description "Build a 'dotenvx run -f … -- ' c
     echo "dotenvx run $flags -- "
 end
 
-function __autoplan_save_state --argument-names plan phase branch pr_title
-    echo "plan=$plan" > .autoplan-progress
-    echo "phase=$phase" >> .autoplan-progress
-    echo "branch=$branch" >> .autoplan-progress
-    echo "pr_title=$pr_title" >> .autoplan-progress
+function __autoplan_save_state --argument-names plan phase pr_title
+    echo "plan=$plan" > $__autoplan_root/.autoplan-progress
+    echo "phase=$phase" >> $__autoplan_root/.autoplan-progress
+    echo "pr_title=$pr_title" >> $__autoplan_root/.autoplan-progress
     set_color brblack
     echo "↩️  Resume from this phase ($phase) with: autoplan --continue"
     set_color normal

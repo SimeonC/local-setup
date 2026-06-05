@@ -11,6 +11,7 @@
 For each plan, check all required frontmatter fields are present and non-empty:
 - `description` — must be a quoted single-line string (2-3 sentences). If missing, generate one from the plan's Context + Scope sections and add it.
 - `branch`, `test_cmd` (or `manual_test`), `prompts` — flag any missing as errors.
+- `cwd:` — if set, verify the path exists relative to the run root. If `test_cmd` or `verify_cmds` contain a `cd <subdir> &&` prefix that matches `cwd:`, flag as redundant and remove.
 
 ## Step 3: Chain Integrity
 

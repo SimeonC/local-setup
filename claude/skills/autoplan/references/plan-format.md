@@ -17,12 +17,22 @@ verify_cmds:                # optional — YAML list of deterministic shell comm
 env_files:                  # optional — YAML list of dotenv files loaded (via dotenvx) for test_cmd and verify_cmds
   - .semaphore/deployEnvironments/.staging-qa.env
 next: ./<slug>-2.md         # optional — next plan in chain
+cwd: ./monolith-free-sizing  # optional — subdir relative to autoplan launch dir; harness cds into it for this plan's duration (git, tests, commit all run there). Default: `.` (run root).
+create_branch: false         # optional — false = reuse existing local branch only (no fetch, no create; errors if absent locally). Default: true (create from origin/main if not found locally).
 ---
 ```
 
 ### env_files: Env Files for Harness-Run Commands
 
 `env_files` is an optional YAML list of dotenv file paths, resolved relative to the directory autoplan runs from (the repo root), NOT the plan file. When set, the harness wraps every `test_cmd` segment and every `verify_cmds` entry as `dotenvx run -f <f1> -f <f2> -- <cmd>`. Requires `dotenvx` (`brew install dotenvx/brew/dotenvx`). Variables already set in the environment win over file values. Note that `verify_cmds` run with `CI=true` exported (non-interactive lint/build/test), whereas `test_cmd` runs without it. Reference existing env files where possible rather than creating new ones.
+
+### cwd: Per-Plan Working Directory
+
+`cwd:` is an optional path (relative to the directory where `autoplan` is invoked, or absolute) that the harness `cd`s into for the duration of this plan. All git operations, test commands, `verify_cmds`, and the commit run in that directory. When `cwd:` is set, `test_cmd` and `verify_cmds` should NOT include a `cd <subdir> &&` prefix — the harness handles the directory change. Branch is also read and checked out in that directory. Note: `env_files` paths are still resolved relative to the autoplan launch dir (run root), not `cwd:`.
+
+### create_branch: Local Branch Reuse
+
+`create_branch: false` tells the harness to reuse an existing **local** branch only: no `git fetch`, no branch creation. The harness checks out the branch if it is not current, and errors if the branch is absent locally. Use this when the branch already exists from a previous partial run or was created manually. Default (`true`) creates the branch from `origin/main` if it does not exist locally.
 
 ### verify_cmds: Deterministic Verification Commands
 
@@ -36,7 +46,7 @@ next: ./<slug>-2.md         # optional — next plan in chain
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
 - **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `next`, `pr_title`, `manual_test`, and `env_files` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
+All fields except `next:`, `pr_title:`, `manual_test:`, `env_files:`, `cwd:`, and `create_branch:` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
 
 ## Body Sections
 
