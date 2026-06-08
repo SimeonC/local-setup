@@ -7,11 +7,11 @@ Plan directory: $PLAN_DIR
 
 ## Step 0: Create the team
 
-Call `TeamCreate(team_name: "autoplan-chain-pr", description: "Autoplan chain-review + PR-body phases")`. All teammates in this orchestrator join this team so they run in attachable tmux panes.
+Call `TeamCreate(team_name: "$TEAM_NAME", description: "Autoplan chain-review + PR-body phases")`. All teammates in this orchestrator join this team so they run in attachable tmux panes.
 
 ## Step 1: Spawn the chain-review teammate
 
-Spawn a teammate via `Agent` with `team_name: "autoplan-chain-pr"`, `name: "chain-review"`, `subagent_type: "general-purpose"` to review commits and clean up leftover plan/prompts files. Pass this prompt verbatim:
+Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "chain-review"`, `subagent_type: "general-purpose"` to review commits and clean up leftover plan/prompts files. Pass this prompt verbatim:
 
 ```
 Review the completed autoplan chain on branch `$BRANCH` and clean up.
@@ -35,7 +35,7 @@ After the teammate finishes, dismiss it: `SendMessage(to: "chain-review", messag
 
 ## Step 2: Spawn the PR-body teammate
 
-Spawn a teammate via `Agent` with `team_name: "autoplan-chain-pr"`, `name: "pr-body"`, `subagent_type: "general-purpose"`, `model: "haiku"` to generate the PR body. Pass this prompt verbatim:
+Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "pr-body"`, `subagent_type: "general-purpose"`, `model: "haiku"` to generate the PR body. Pass this prompt verbatim:
 
 ```
 $PR_BODY_PROMPT

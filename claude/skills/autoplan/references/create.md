@@ -34,6 +34,8 @@ See [plan-format.md](references/plan-format.md) and [prompts-format.md](referenc
 
 The `description` frontmatter field must be a quoted single-line string of 2-3 sentences summarising what the plan does and why. For multi-plan chains, each plan's `description` should summarise only that plan's unit of work (not the whole chain).
 
+The `commit_msg` frontmatter field must be a quoted single-line gitmoji commit message derived from this plan's title and Scope — e.g. `"✨ Add token refresh endpoint"`, `"🐛 Fix race condition in session cleanup"`. Use these conventions: `✨` new feature, `🐛` bug fix, `♻️` refactor, `🔧` config/tooling, `📝` docs, `✅` tests, `🚀` performance, `🔥` remove code/files, `💄` UI/style, `🔒` security. Keep it under 72 characters. Each plan in a chain gets its own `commit_msg` scoped to that plan's work.
+
 Key points for prompts file:
 - Populate all 5 sections with domain-specific rules from Step 1
 - `fix_test` and `fix_verify` must follow the TDD red→green→commit pattern:

@@ -18,6 +18,7 @@ env_files:                  # optional — YAML list of dotenv files loaded (via
   - .semaphore/deployEnvironments/.staging-qa.env
 next: ./<slug>-2.md         # optional — next plan in chain
 cwd: ./monolith-free-sizing  # optional — subdir relative to autoplan launch dir; harness cds into it for this plan's duration (git, tests, commit all run there). Default: `.` (run root).
+commit_msg: "✨ Add ..."     # required — single-line gitmoji commit message for this plan's change; used by harness for deterministic commit (no LLM)
 ---
 ```
 
@@ -48,7 +49,7 @@ cwd: ./monolith-free-sizing  # optional — subdir relative to autoplan launch d
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
 - **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `branch:`, `next:`, `pr_title:`, `manual_test:`, `env_files:`, and `cwd:` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
+All fields except `branch:`, `next:`, `pr_title:`, `manual_test:`, `env_files:`, and `cwd:` are required. `commit_msg` is technically optional (harness falls back to a Haiku LLM commit), but should always be set — omitting it is a quality gap flagged by refine. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
 
 ## Body Sections
 
@@ -94,6 +95,7 @@ test_cmd: npm run test:ai
 pr_title: "Add token refresh to auth service"
 prompts: ./auth-refresh-1-prompts.md
 next: ./auth-refresh-2.md
+commit_msg: "✨ Add silent token refresh endpoint and 401-retry controller"
 ---
 
 # Add Token Refresh

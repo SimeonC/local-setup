@@ -461,8 +461,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             end
         end
 
-        # Save next plan path BEFORE deleting plan file
+        # Save next plan path and commit_msg BEFORE deleting plan file
         set -l next_plan (__autoplan_frontmatter $current_plan next)
+        set -l commit_msg (__autoplan_frontmatter $current_plan commit_msg)
 
         # Delete manual_test instructions file
         if test -n "$manual_test_file" -a -f "$manual_test_file"
@@ -484,10 +485,20 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo ""
             echo "💾 Commit..."
 
-            set -l commit_prompt (__autoplan_interpolate_prompt \
-                (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
-                $current_plan $branch $test_cmd)
-            env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+            if test -n "$commit_msg"
+                if test -n "$(git -C $plan_cwd status --porcelain)"
+                    git -C $plan_cwd add -A
+                    git -C $plan_cwd commit -m "$commit_msg"
+                else
+                    echo "ℹ️  Nothing to commit."
+                end
+            else
+                # Fallback: no commit_msg in frontmatter → let Haiku author the commit
+                set -l commit_prompt (__autoplan_interpolate_prompt \
+                    (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
+                    $current_plan $branch $test_cmd)
+                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+            end
         end
 
         # Follow linked list
@@ -545,11 +556,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
                 $current_plan $branch $test_cmd)
 
+            set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
+            set -l team_name "autoplan-cr-$team_slug"
             set -l cr_orch (cat "$HOME/.claude/skills/autoplan/references/chain-review-pr-orchestrator.md" \
                 | string replace -a -- '$PLAN_FILE' "$current_plan" \
                 | string replace -a -- '$BRANCH' "$branch" \
                 | string replace -a -- '$PLAN_DIR' "$plan_dir" \
-                | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub")
+                | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
+                | string replace -a -- '$TEAM_NAME' "$team_name")
 
             env -C $final_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$cr_orch"
 
