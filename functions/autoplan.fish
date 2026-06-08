@@ -87,6 +87,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         if not string match -q '/*' $prompts_path
             set prompts_path (dirname $current_plan)/$prompts_path
         end
+        if not test -f "$prompts_path"
+            echo "Error: prompts file not found: $prompts_path" >&2
+            return 1
+        end
     end
 
     mkdir -p $__autoplan_root/tmp
@@ -233,73 +237,19 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-        # ===== GATE + IMPLEMENT (combined orchestrator) =====
-        if not __autoplan_check_skip gate_implement
-            __autoplan_save_state $current_plan gate_implement $pr_title
-            echo "🔍 Gate + Implement orchestrator..."
-
-            rm -f $__autoplan_root/tmp/autoplan-gate-result.txt $__autoplan_root/tmp/autoplan-gate-summary.txt
-
-            set -l gate_sub (cat "$HOME/.claude/skills/autoplan/references/gate-prompt.md" \
-                | string replace -a -- '$PLAN_FILE' "$current_plan" \
-                | string replace -a -- '$GATE_RESULT' "$__autoplan_root/tmp/autoplan-gate-result.txt" \
-                | string replace -a -- '$GATE_SUMMARY' "$__autoplan_root/tmp/autoplan-gate-summary.txt")
+        # ===== IMPLEMENT =====
+        if not __autoplan_check_skip implement
+            __autoplan_save_state $current_plan implement $pr_title
+            echo "🛠️  Implement..."
 
             set -l impl_sub (__autoplan_build_user_prompt \
                 implement-prompt.md DOMAIN_IMPLEMENT implement \
                 "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
 
-            set -l orch_prompt (cat "$HOME/.claude/skills/autoplan/references/gate-implement-orchestrator.md" \
-                | string replace -a -- '$PLAN_FILE' "$current_plan" \
-                | string replace -a -- '$BRANCH' "$branch" \
-                | string replace -a -- '$TEST_CMD' "$test_cmd" \
-                | string replace -a -- '$GATE_PROMPT' "$gate_sub" \
-                | string replace -a -- '$IMPLEMENT_PROMPT' "$impl_sub")
+            env -C $plan_cwd claude --permission-mode $permission_mode \
+                --append-system-prompt "$implement_system_prompt" "$impl_sub"
 
-            env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$implement_system_prompt" --model sonnet --effort high "$orch_prompt"
-
-            set_color --bold
-            echo "📋 Gate Summary"
-            set_color normal
-            if test -f $__autoplan_root/tmp/autoplan-gate-summary.txt
-                cat $__autoplan_root/tmp/autoplan-gate-summary.txt
-            else
-                echo "(no summary file written)"
-            end
-
-            set -l gate_result ""
-            if test -f $__autoplan_root/tmp/autoplan-gate-result.txt
-                set gate_result (head -1 $__autoplan_root/tmp/autoplan-gate-result.txt | string trim)
-            end
-
-            set_color --bold
-            echo "🚦 Gate Result"
-            set_color normal
-            switch $gate_result
-                case READY
-                    set_color green; echo $gate_result; set_color normal
-                    echo "✅ Gate + Implement complete."
-                case CANNOT_FIX
-                    set_color red; echo $gate_result; set_color normal
-                    echo "❌ Gate: plan cannot be made automatable." >&2
-                    echo "Opening interactive Claude session with gate summary so you can fix the plan…"
-                    set -l _handoff_prompt "Autoplan gate reported CANNOT_FIX for plan: $current_plan
-Branch: $branch
-
-The plan cannot be made automatically executable. Read the gate summary below, then help the user revise the plan file so a future autoplan run can proceed. Do NOT implement the plan — only edit the plan file (and prompts file if relevant). After edits, the user will re-run \`autoplan --continue\`.
-
-## Gate Summary
-"(cat $__autoplan_root/tmp/autoplan-gate-summary.txt 2>/dev/null)"
-
-## Gate Result
-$gate_result"
-                    env -C $plan_cwd claude --permission-mode $permission_mode "$_handoff_prompt"
-                    return 1
-                case '*'
-                    set_color red; echo "(missing or unrecognised)"; set_color normal
-                    echo "❌ Gate: sentinel file missing or unrecognised." >&2
-                    return 1
-            end
+            echo "✅ Implement complete."
         end
 
         # ===== TEST/FIX LOOP =====
@@ -553,8 +503,8 @@ $gate_result"
                 return 1
             end
             set current_plan $next_plan
-            # Update state so --continue resumes at the next plan's gate
-            __autoplan_save_state $current_plan gate_implement $pr_title
+            # Update state so --continue resumes at the next plan's implement
+            __autoplan_save_state $current_plan implement $pr_title
         else
             break
         end
@@ -719,9 +669,6 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
         | string replace -a -- '$VERIFY_LOG' "$__autoplan_root/tmp/autoplan-verify-result.txt" \
         | string replace -a -- '$BRANCH' "$branch_name" \
         | string replace -a -- '$TEST_CMD' "$test_cmd_val" \
-        | string replace -a -- '$GATE_LOG' "$__autoplan_root/tmp/autoplan-gate-output.txt" \
-        | string replace -a -- '$GATE_RESULT' "$__autoplan_root/tmp/autoplan-gate-result.txt" \
-        | string replace -a -- '$GATE_SUMMARY' "$__autoplan_root/tmp/autoplan-gate-summary.txt" \
         | string replace -a -- '$VERIFY_CMD_LOG' "$__autoplan_root/tmp/autoplan-verify-cmd-output.txt"
 end
 
@@ -782,7 +729,7 @@ end
 
 function __autoplan_phase_index --argument-names phase
     switch $phase
-        case gate_implement;  echo 1
+        case implement;       echo 1
         case test_fix;        echo 2
         case harden_verify;   echo 3
         case verify_cmds;     echo 4

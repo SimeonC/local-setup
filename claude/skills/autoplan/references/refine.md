@@ -24,11 +24,13 @@ Apply existing chain integrity checks:
 
 ## Step 4: Per-Plan Atomicity Re-check
 
-For each plan in the chain, re-evaluate atomicity against all four criteria:
+For each plan in the chain, re-evaluate atomicity against all six criteria:
 1. **Single session**: Could be implemented in ~one Claude session (~15-30 min)
 2. **Concrete scope**: Names specific files, functions, or interfaces — not vague
 3. **Automatable verification**: Commands that pass/fail — not subjective
 4. **No internal ordering**: Steps within a plan must not depend on each other's order
+5. **No ambiguous decisions**: Must not leave architectural or design choices to the implementing agent — no "choose between X or Y", "decide the best approach", or "consider whether to". All decisions must already be made.
+6. **Implementation specifics**: Key function signatures, data structures, API shapes, or patterns must be defined — not left to the agent's judgment. The implementing agent should be a typist, not an architect.
 
 ## Step 5: Cross-Plan Inconsistencies
 

@@ -29,7 +29,6 @@ If you find any of the above in a prompts file, remove it — the harness alread
 | `$VERIFY_CMD_LOG` | `./tmp/autoplan-verify-cmd-output.txt` |
 | `$BRANCH` | The git branch name from plan frontmatter |
 | `$TEST_CMD` | The test command from plan frontmatter |
-| `$GATE_LOG` | `./tmp/autoplan-gate-output.txt` |
 
 Inside a prompts file these variables are substituted into the per-plan section before it is interpolated into the user prompt. They are most useful for cross-referencing a log path in a domain note (e.g. "the playwright trace dir lives next to $TEST_LOG").
 
