@@ -100,6 +100,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     set -l verify_system_prompt        (__autoplan_compose_system base stage-restrictions scope verify)
 
     # ===== MAIN LOOP (linked list traversal) =====
+    set -l confirmed_cwds
     while true
         # Re-load per-plan overrides (test_cmd, prompts can be overridden)
         set -l plan_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
@@ -153,44 +154,74 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # Re-read branch per plan
         set -l branch (__autoplan_frontmatter $current_plan branch)
-        if test -z "$branch"
-            echo "Error: Plan file missing required frontmatter key: branch" >&2
-            return 1
-        end
 
-        # Read create_branch (default true)
-        set -l create_branch_val (__autoplan_frontmatter $current_plan create_branch)
-        set -l do_create_branch true
-        if test "$create_branch_val" = false
-            set do_create_branch false
-        end
-
-        # Branch resolution
-        if git -C $plan_cwd show-ref --verify --quiet refs/heads/$branch
-            # Branch exists locally — checkout if not current
-            if test (git -C $plan_cwd branch --show-current) != $branch
-                git -C $plan_cwd checkout $branch
-            end
-        else if not set -q skip_to_phase; and test "$do_create_branch" = true
-            # New branch: guard dirty tree, then create from origin/main
-            if not git -C $plan_cwd diff --quiet HEAD
-                echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
+        if test -z "$branch"; or test "$branch" = "<current>"
+            # Adopt-current mode: use whatever branch the repo is on
+            set -l current_branch (git -C $plan_cwd branch --show-current 2>/dev/null)
+            if test -z "$current_branch"
+                echo "Error: Repo at '$plan_cwd' is in detached HEAD state. Checkout a branch first." >&2
                 return 1
             end
-            git -C $plan_cwd fetch origin main
-            git -C $plan_cwd checkout --no-track -b $branch origin/main
-        else if not set -q skip_to_phase; and test "$do_create_branch" = false
-            echo "Error: Branch $branch not found locally and create_branch: false" >&2
-            return 1
-        else
-            echo "Error: Branch $branch not found locally (expected when resuming)" >&2
-            return 1
-        end
 
-        # Assert we are on the correct branch before proceeding
-        if test (git -C $plan_cwd branch --show-current) != $branch
-            echo "Error: Repo is on branch '$(git -C $plan_cwd branch --show-current)' but plan requires '$branch'. Switch manually." >&2
-            return 1
+            # Per-cwd chooser: show fzf once per cwd per run when interactive
+            if not contains -- $plan_cwd $confirmed_cwds
+                and test -t 0; and not set -q DEVCONTAINER
+                and type -q fzf
+                set -l out (git -C $plan_cwd branch --format='%(refname:short)' \
+                    | fzf --print-query --query="$current_branch" --height=40% --reverse \
+                          --header="Branch for $plan_cwd — Enter to pick · type new name + Enter to create" 2>/dev/null)
+                set -l fzf_status $status
+                switch $fzf_status
+                    case 0
+                        # Existing branch selected (last line = selection)
+                        set current_branch $out[-1]
+                        if test (git -C $plan_cwd branch --show-current) != $current_branch
+                            git -C $plan_cwd checkout $current_branch
+                        end
+                    case 1
+                        # No match — typed query becomes new branch off HEAD
+                        if test -z "$out[1]"
+                            echo "Error: No branch name typed." >&2
+                            return 1
+                        end
+                        set current_branch $out[1]
+                        git -C $plan_cwd checkout -b $current_branch
+                    case '*'
+                        # 130 = Esc / abort
+                        return 1
+                end
+            else if not contains -- $plan_cwd $confirmed_cwds
+                and not type -q fzf
+                echo "note: fzf not installed — adopting current branch '$current_branch' in $plan_cwd (install with: brew install fzf)"
+            end
+
+            set confirmed_cwds $confirmed_cwds $plan_cwd
+            set branch $current_branch
+        else
+            # Ensure-branch mode: branch: <name> is specified
+            if git -C $plan_cwd show-ref --verify --quiet refs/heads/$branch
+                # Branch exists locally — checkout if not current
+                if test (git -C $plan_cwd branch --show-current) != $branch
+                    git -C $plan_cwd checkout $branch
+                end
+            else if not set -q skip_to_phase
+                # New branch: guard dirty tree, then create from origin/main
+                if not git -C $plan_cwd diff --quiet HEAD
+                    echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
+                    return 1
+                end
+                git -C $plan_cwd fetch origin main
+                git -C $plan_cwd checkout --no-track -b $branch origin/main
+            else
+                echo "Error: Branch '$branch' not found locally (expected when resuming)." >&2
+                return 1
+            end
+
+            # Assert we are on the correct branch before proceeding
+            if test (git -C $plan_cwd branch --show-current) != $branch
+                echo "Error: Repo is on branch '$(git -C $plan_cwd branch --show-current)' but plan requires '$branch'. Switch manually." >&2
+                return 1
+            end
         end
 
         set -l plan_desc (__autoplan_frontmatter $current_plan description)
@@ -550,6 +581,10 @@ $gate_result"
         set final_cwd (realpath $final_cwd 2>/dev/null)
         if test -d "$final_cwd"
             __autoplan_activate_tools $final_cwd
+        end
+        # Adopt-current: if branch omitted or <current>, resolve from actual checkout
+        if test -z "$branch"; or test "$branch" = "<current>"
+            set branch (git -C $final_cwd branch --show-current 2>/dev/null)
         end
 
         set -l plan_dir (dirname $current_plan)

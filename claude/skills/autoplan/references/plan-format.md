@@ -5,7 +5,7 @@
 ```yaml
 ---
 description: "2-3 sentence summary of what this plan does and why."  # required — shown in progress output
-branch: feat/...           # required — git branch name
+branch: feat/...           # optional — git branch intent: present = ensure/create this branch; omit or `<current>` = adopt the repo's current checkout (with interactive per-cwd chooser)
 test_cmd: npm run test:ai   # required — command(s) to run tests
 manual_test: ./plan-name.manual.md  # optional — path to manual test instructions file
 pr_title: "..."             # optional — PR title string; omit to skip PR creation (commits only)
@@ -18,7 +18,6 @@ env_files:                  # optional — YAML list of dotenv files loaded (via
   - .semaphore/deployEnvironments/.staging-qa.env
 next: ./<slug>-2.md         # optional — next plan in chain
 cwd: ./monolith-free-sizing  # optional — subdir relative to autoplan launch dir; harness cds into it for this plan's duration (git, tests, commit all run there). Default: `.` (run root).
-create_branch: false         # optional — false = reuse existing local branch only (no fetch, no create; errors if absent locally). Default: true (create from origin/main if not found locally).
 ---
 ```
 
@@ -30,9 +29,12 @@ create_branch: false         # optional — false = reuse existing local branch 
 
 `cwd:` is an optional path (relative to the directory where `autoplan` is invoked, or absolute) that the harness `cd`s into for the duration of this plan. All git operations, test commands, `verify_cmds`, and the commit run in that directory. When `cwd:` is set, `test_cmd` and `verify_cmds` should NOT include a `cd <subdir> &&` prefix — the harness handles the directory change. Branch is also read and checked out in that directory. Note: `env_files` paths are still resolved relative to the autoplan launch dir (run root), not `cwd:`.
 
-### create_branch: Local Branch Reuse
+### branch: Branch Intent
 
-`create_branch: false` tells the harness to reuse an existing **local** branch only: no `git fetch`, no branch creation. The harness checks out the branch if it is not current, and errors if the branch is absent locally. Use this when the branch already exists from a previous partial run or was created manually. Default (`true`) creates the branch from `origin/main` if it does not exist locally.
+`branch:` encodes intent, not just a name:
+
+- **`branch: <name>`** — ensure this branch: checkout if present locally; if absent and not resuming, create from `origin/main` (dirty-tree guard + `git fetch origin main` first).
+- **`branch:` omitted OR `branch: <current>`** — adopt-current mode: use whatever branch the repo is currently on. On first encounter per repo per run (in an interactive terminal with `fzf` installed), a searchable chooser appears pre-filled with the current branch; press Enter to keep it, or type a new name to create it off HEAD. Subsequent plans with the same `cwd:` skip the chooser. Degrades silently if non-interactive or `fzf` is missing.
 
 ### verify_cmds: Deterministic Verification Commands
 
@@ -46,7 +48,7 @@ create_branch: false         # optional — false = reuse existing local branch 
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
 - **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `next:`, `pr_title:`, `manual_test:`, `env_files:`, `cwd:`, and `create_branch:` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
+All fields except `branch:`, `next:`, `pr_title:`, `manual_test:`, `env_files:`, and `cwd:` are required. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
 
 ## Body Sections
 

@@ -60,7 +60,7 @@ Follow TDD: red → green → commit.
 
 Replace `[HOW TO RUN SINGLE FAILING FILE]` with the command gathered in Step 1 Round 2.
 
-For multi-repo chains (each plan targets a different git repo), set `cwd:` to the sub-repo path relative to the chain's root directory, and set `create_branch: false` if the branch already exists locally in that repo. When `cwd:` is set, omit `cd <subdir> &&` from `test_cmd` and `verify_cmds`.
+For multi-repo chains (each plan targets a different git repo), set `cwd:` to the sub-repo path relative to the chain's root directory. Use `branch: <name>` to ensure/create a specific branch in that repo, or omit `branch:` (or use `branch: <current>`) to adopt the repo's current checkout with an interactive chooser. When `cwd:` is set, omit `cd <subdir> &&` from `test_cmd` and `verify_cmds`.
 
 ## Step 3: Evaluate Atomicity
 
