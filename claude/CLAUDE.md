@@ -22,10 +22,9 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 - **Self-contained implementation work** can be delegated to an `Agent` (or a team for multi-stream work). A "self-contained" task has clear inputs, scoped file set, and a single deliverable.
 - **Single-task orientation — CRITICAL.** Each agent/team gets ONE task with explicit scope. An implementation agent implements; it does NOT also run the full test suite, lint the repo, or touch unrelated areas. Verification, broad testing, and cross-cutting checks are separate tasks (separate agents, or done by the lead).
 - **Teams only when** ≥3 independent, context-heavy workstreams benefit from parallelism + isolation (multi-repo refactors, parallel research + impl streams). If streams need tight back-and-forth, skip the team.
-- **Model tier** — cheapest fit:
-  - `"haiku"`: search, reads, scripts, simple edits, doc lookup.
-  - `"default"`: code editing, refactoring, writing new code, non-trivial test analysis.
-  - `"best"`: complex architectural decisions, tricky multi-file refactors. Rare.
+- **Two separate params** on every `Agent` call:
+  - `subagent_type` — the agent role. Valid: `general-purpose` (impl/edits), `Explore` (search/research), `Plan`, `claude`, `statusline-setup`. NEVER a model ID.
+  - `model` — cheapest fit: `"haiku"` (search, reads, scripts, simple edits, doc lookup) · `"default"` (code editing, refactoring, new code, non-trivial test analysis) · `"best"` (complex architecture, tricky multi-file refactors; rare).
 
 ### Teammate Lifecycle (only if a team is started)
 
@@ -50,4 +49,4 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 - Follow the repo's existing commit convention (check recent `git log` output).
 - If no convention exists, use gitmoji style (e.g. `🐛 Fix race condition in session cleanup`).
-- **Always delegate committing to a Haiku subagent.** Pass it the diff, recent log, and commit convention. The subagent stages all files and creates the commit.
+- **Always delegate committing** via `Agent(subagent_type: "general-purpose", model: "haiku")`. Pass it the diff, recent log, and commit convention. The subagent stages all files and creates the commit.
