@@ -149,8 +149,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "Error: cwd '$plan_cwd_raw' not found for plan $current_plan" >&2
             return 1
         end
-        cd $plan_cwd
-        __autoplan_activate_tools
+        __autoplan_activate_tools $plan_cwd
 
         # Re-read branch per plan
         set -l branch (__autoplan_frontmatter $current_plan branch)
@@ -167,19 +166,19 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
 
         # Branch resolution
-        if git show-ref --verify --quiet refs/heads/$branch
+        if git -C $plan_cwd show-ref --verify --quiet refs/heads/$branch
             # Branch exists locally — checkout if not current
-            if test (git branch --show-current) != $branch
-                git checkout $branch
+            if test (git -C $plan_cwd branch --show-current) != $branch
+                git -C $plan_cwd checkout $branch
             end
         else if not set -q skip_to_phase; and test "$do_create_branch" = true
             # New branch: guard dirty tree, then create from origin/main
-            if not git diff --quiet HEAD
+            if not git -C $plan_cwd diff --quiet HEAD
                 echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
                 return 1
             end
-            git fetch origin main
-            git checkout --no-track -b $branch origin/main
+            git -C $plan_cwd fetch origin main
+            git -C $plan_cwd checkout --no-track -b $branch origin/main
         else if not set -q skip_to_phase; and test "$do_create_branch" = false
             echo "Error: Branch $branch not found locally and create_branch: false" >&2
             return 1
@@ -189,8 +188,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
 
         # Assert we are on the correct branch before proceeding
-        if test (git branch --show-current) != $branch
-            echo "Error: Repo is on branch '$(git branch --show-current)' but plan requires '$branch'. Switch manually." >&2
+        if test (git -C $plan_cwd branch --show-current) != $branch
+            echo "Error: Repo is on branch '$(git -C $plan_cwd branch --show-current)' but plan requires '$branch'. Switch manually." >&2
             return 1
         end
 
@@ -226,7 +225,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 | string replace -a -- '$GATE_PROMPT' "$gate_sub" \
                 | string replace -a -- '$IMPLEMENT_PROMPT' "$impl_sub")
 
-            command claude --permission-mode $permission_mode --append-system-prompt "$implement_system_prompt" --model sonnet --effort high "$orch_prompt"
+            env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$implement_system_prompt" --model sonnet --effort high "$orch_prompt"
 
             set_color --bold
             echo "📋 Gate Summary"
@@ -263,7 +262,7 @@ The plan cannot be made automatically executable. Read the gate summary below, t
 
 ## Gate Result
 $gate_result"
-                    claude --permission-mode $permission_mode "$_handoff_prompt"
+                    env -C $plan_cwd claude --permission-mode $permission_mode "$_handoff_prompt"
                     return 1
                 case '*'
                     set_color red; echo "(missing or unrecognised)"; set_color normal
@@ -281,7 +280,7 @@ $gate_result"
                 echo ""
                 echo "🧪 Running tests..."
 
-                if __autoplan_run_tests "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
+                if __autoplan_run_tests $plan_cwd "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
                     echo "✅ Tests pass."
                     break
                 else
@@ -303,7 +302,7 @@ $gate_result"
                         fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                         "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
 
-                    claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $fix_prompt"
+                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $fix_prompt"
                 end
             end
         end
@@ -334,7 +333,7 @@ $gate_result"
                     harden-prompt.md DOMAIN_HARDEN harden \
                     "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
 
-                command claude --permission-mode $permission_mode --append-system-prompt "$harden_system_prompt" "$harden_sub"
+                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$harden_system_prompt" "$harden_sub"
 
                 echo ""
                 echo "🔎 Verify (audit-only, pass $verify_pass/$max_verify_passes)..."
@@ -343,7 +342,7 @@ $gate_result"
                     verify-prompt.md DOMAIN_VERIFY verify \
                     "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
 
-                command claude --permission-mode $permission_mode --append-system-prompt "$verify_system_prompt" "$verify_sub"
+                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$verify_system_prompt" "$verify_sub"
 
                 if not test -f $__autoplan_root/tmp/autoplan-verify-result.txt
                     echo "❌ Verify did not write sentinel file." >&2
@@ -360,7 +359,7 @@ $gate_result"
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
 
-                    claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
+                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
 
                     # Reset fix attempts and go back through test/fix loop
                     set fix_attempt 0
@@ -368,7 +367,7 @@ $gate_result"
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
 
-                        if __autoplan_run_tests "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
+                        if __autoplan_run_tests $plan_cwd "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
                             echo "✅ Tests pass."
                             break
                         else
@@ -390,7 +389,7 @@ $gate_result"
                                 fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                                 "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
 
-                            claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $refix_prompt"
+                            env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $refix_prompt"
                         end
                     end
                     # Continue verify loop
@@ -415,10 +414,7 @@ $gate_result"
                     for vc in $verify_cmds
                         echo ""
                         echo "▶ verify_cmd: $vc_env_prefix$vc"
-                        begin
-                            set -lx CI true
-                            eval $vc_env_prefix$vc
-                        end >$__autoplan_root/tmp/autoplan-verify-cmd-raw.txt 2>&1
+                        env -C $plan_cwd CI=true fish -c $vc_env_prefix$vc >$__autoplan_root/tmp/autoplan-verify-cmd-raw.txt 2>&1
                         set vc_failed_status $status
                         cat $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
                         if test $vc_failed_status -ne 0
@@ -458,7 +454,7 @@ $gate_result"
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
                         "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
 
-                    claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model sonnet "/plan $fix_vc_prompt"
+                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model sonnet "/plan $fix_vc_prompt"
                 end
             end
         end
@@ -510,7 +506,7 @@ $gate_result"
             set -l commit_prompt (__autoplan_interpolate_prompt \
                 (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                 $current_plan $branch $test_cmd)
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+            env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
         end
 
         # Follow linked list
@@ -526,7 +522,6 @@ $gate_result"
                 return 1
             end
             set current_plan $next_plan
-            cd $__autoplan_root
             # Update state so --continue resumes at the next plan's gate
             __autoplan_save_state $current_plan gate_implement $pr_title
         else
@@ -554,8 +549,7 @@ $gate_result"
         end
         set final_cwd (realpath $final_cwd 2>/dev/null)
         if test -d "$final_cwd"
-            cd $final_cwd
-            __autoplan_activate_tools
+            __autoplan_activate_tools $final_cwd
         end
 
         set -l plan_dir (dirname $current_plan)
@@ -572,9 +566,9 @@ $gate_result"
                 | string replace -a -- '$PLAN_DIR' "$plan_dir" \
                 | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub")
 
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$cr_orch"
+            env -C $final_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$cr_orch"
 
-            git push origin $branch
+            git -C $final_cwd push origin $branch
 
             if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
                 echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
@@ -594,7 +588,7 @@ Verify the commits look complete and nothing was obviously missed.
 ## Summary
 Print a brief summary of what was completed and flag anything that looks incomplete."
 
-            command claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$review_only_prompt"
+            env -C $final_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$review_only_prompt"
             echo "ℹ️  No pr_title — skipping PR creation."
         end
     end
@@ -696,8 +690,8 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
         | string replace -a -- '$VERIFY_CMD_LOG' "$__autoplan_root/tmp/autoplan-verify-cmd-output.txt"
 end
 
-function __autoplan_run_tests --argument-names test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test; extra args are env_files for dotenvx"
-    set -l env_prefix (__autoplan_env_prefix $argv[4..-1] | string collect --allow-empty)
+function __autoplan_run_tests --argument-names plan_cwd test_cmd output_file manual_test_file --description "Run test command(s), then optional manual test; extra args are env_files for dotenvx"
+    set -l env_prefix (__autoplan_env_prefix $argv[5..-1] | string collect --allow-empty)
     echo -n >$output_file
     if test -n "$test_cmd"
         echo "# Auto Tests" >>$output_file
@@ -706,7 +700,7 @@ function __autoplan_run_tests --argument-names test_cmd output_file manual_test_
             set cmd (string trim $cmd)
             test -z "$cmd"; and continue
             echo "▶ $env_prefix$cmd" | tee -a $output_file
-            eval $env_prefix$cmd 2>&1 | tee -a $output_file
+            env -C $plan_cwd fish -c $env_prefix$cmd 2>&1 | tee -a $output_file
             if test $pipestatus[1] -ne 0
                 return 1
             end
@@ -717,7 +711,7 @@ function __autoplan_run_tests --argument-names test_cmd output_file manual_test_
         echo "# Manual Test Output" >>$output_file
         echo "=====" >>$output_file
         echo "▶ manual_test $manual_test_file" | tee -a $output_file
-        manual_test $manual_test_file 2>&1 | tee -a $output_file
+        env -C $plan_cwd fish -c "manual_test $manual_test_file" 2>&1 | tee -a $output_file
         if test $pipestatus[1] -ne 0
             return 1
         end
@@ -736,9 +730,9 @@ function __autoplan_env_prefix --description "Build a 'dotenvx run -f … -- ' c
     echo "dotenvx run $flags -- "
 end
 
-function __autoplan_activate_tools --description "Re-apply per-directory mise toolchain; interactive PWD/prompt hooks never fire in autoplan's non-interactive fish -c"
+function __autoplan_activate_tools --argument-names plan_cwd --description "Re-apply per-directory mise toolchain via subshell; never changes the main process CWD"
     if type -q mise
-        mise hook-env -s fish | source
+        env -C $plan_cwd fish -c "mise hook-env -s fish" | source
     end
 end
 
