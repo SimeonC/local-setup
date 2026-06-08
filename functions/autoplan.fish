@@ -150,6 +150,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             return 1
         end
         cd $plan_cwd
+        __autoplan_activate_tools
 
         # Re-read branch per plan
         set -l branch (__autoplan_frontmatter $current_plan branch)
@@ -554,6 +555,7 @@ $gate_result"
         set final_cwd (realpath $final_cwd 2>/dev/null)
         if test -d "$final_cwd"
             cd $final_cwd
+            __autoplan_activate_tools
         end
 
         set -l plan_dir (dirname $current_plan)
@@ -732,6 +734,12 @@ function __autoplan_env_prefix --description "Build a 'dotenvx run -f … -- ' c
         set -a flags "-f $f"
     end
     echo "dotenvx run $flags -- "
+end
+
+function __autoplan_activate_tools --description "Re-apply per-directory mise toolchain; interactive PWD/prompt hooks never fire in autoplan's non-interactive fish -c"
+    if type -q mise
+        mise hook-env -s fish | source
+    end
 end
 
 function __autoplan_save_state --argument-names plan phase pr_title
