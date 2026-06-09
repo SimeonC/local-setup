@@ -104,7 +104,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     set -l verify_system_prompt        (__autoplan_compose_system base stage-restrictions scope verify)
 
     # ===== MAIN LOOP (linked list traversal) =====
-    set -l confirmed_cwds
     while true
         # Re-load per-plan overrides (test_cmd, prompts can be overridden)
         set -l plan_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
@@ -167,9 +166,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 return 1
             end
 
-            # Per-cwd chooser: show fzf once per cwd per run when interactive
-            if not contains -- $plan_cwd $confirmed_cwds
-                and test -t 0; and not set -q DEVCONTAINER
+            # Chooser: show fzf for every adopt-current plan (skip on resume)
+            if test -t 0; and not set -q DEVCONTAINER
+                and not set -q skip_to_phase
                 and type -q fzf
                 set -l out (git -C $plan_cwd branch --format='%(refname:short)' \
                     | fzf --print-query --query="$current_branch" --height=40% --reverse \
@@ -194,12 +193,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         # 130 = Esc / abort
                         return 1
                 end
-            else if not contains -- $plan_cwd $confirmed_cwds
+            else if test -t 0; and not set -q DEVCONTAINER
+                and not set -q skip_to_phase
                 and not type -q fzf
                 echo "note: fzf not installed — adopting current branch '$current_branch' in $plan_cwd (install with: brew install fzf)"
             end
 
-            set confirmed_cwds $confirmed_cwds $plan_cwd
             set branch $current_branch
         else
             # Ensure-branch mode: branch: <name> is specified
