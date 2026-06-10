@@ -24,7 +24,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             return 1
         end
     else if test (count $argv) -eq 0
-        echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--continue]" >&2
+        echo "Usage: autoplan <plan-file|chain-dir> [--max-fix-attempts N] [--max-verify-passes N] [--continue]" >&2
         return 1
     end
 
@@ -61,6 +61,61 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 case plan;      set current_plan $_parts[2]
                 case phase;     set -g skip_to_phase $_parts[2]
                 case pr_title;  set pr_title $_parts[2]
+            end
+        end
+    else if test -d $argv[1]
+        # Directory mode: auto-detect chain root among remaining plan files
+        set -l roots (__autoplan_find_root $argv[1])
+        set -l root_count (count $roots)
+        if test $root_count -eq 0
+            echo "✅ No plans remaining in $argv[1] — chain complete."
+            return 0
+        else if test $root_count -eq 1
+            set current_plan $roots[1]
+        else
+            # Multiple roots: fzf chooser (interactive) or error (non-interactive / no fzf)
+            if test -t 0; and not set -q DEVCONTAINER; and type -q fzf
+                set -l fzf_items
+                for r in $roots
+                    set -l desc (__autoplan_frontmatter $r description)
+                    if test -n "$desc"
+                        set -a fzf_items "$r  — $desc"
+                    else
+                        set -a fzf_items $r
+                    end
+                end
+                set -l chosen_line (printf '%s\n' $fzf_items \
+                    | fzf --height=40% --reverse \
+                          --header="Multiple chain roots found — select one to run" 2>/dev/null)
+                if test $status -ne 0; or test -z "$chosen_line"
+                    return 1
+                end
+                set current_plan (string split -m 1 '  — ' $chosen_line)[1]
+            else
+                echo "Error: Multiple chain roots found in $argv[1] — cannot auto-select:" >&2
+                for r in $roots
+                    echo "  $r" >&2
+                end
+                return 1
+            end
+        end
+        # Phase resume: if .autoplan-progress refers to this plan, load phase + pr_title
+        if test -f $__autoplan_root/.autoplan-progress
+            set -l _progress_plan ""
+            set -l _progress_phase ""
+            set -l _progress_pr_title ""
+            for _line in (cat $__autoplan_root/.autoplan-progress)
+                set -l _parts (string split -m 1 '=' $_line)
+                switch $_parts[1]
+                    case plan;      set _progress_plan $_parts[2]
+                    case phase;     set _progress_phase $_parts[2]
+                    case pr_title;  set _progress_pr_title $_parts[2]
+                end
+            end
+            set -l _pp_real (realpath $_progress_plan 2>/dev/null)
+            if test "$_pp_real" = "$current_plan"
+                set -g skip_to_phase $_progress_phase
+                set pr_title $_progress_pr_title
             end
         end
     else
@@ -762,6 +817,43 @@ function __autoplan_phase_index --argument-names phase
         case commit;          echo 5
         case chain_review_pr; echo 6
         case '*';             echo 0
+    end
+end
+
+function __autoplan_find_root --argument-names dir --description "Find root plan files in a chain dir: plans with no inbound next: references"
+    set -l plan_files
+    set -l referenced
+
+    # Collect plan files: have frontmatter, exclude *-prompts.md and *.manual.md
+    for f in $dir/*.md
+        test -f $f; or continue
+        string match -q '*-prompts.md' $f; and continue
+        string match -q '*.manual.md' $f; and continue
+        # Must have frontmatter (first line is ---)
+        set -l first_line (head -1 $f 2>/dev/null)
+        test "$first_line" = "---"; or continue
+        set -a plan_files (realpath $f)
+    end
+
+    # Collect all next: targets as realpaths
+    for f in $plan_files
+        set -l next_val (__autoplan_frontmatter $f next)
+        test -z "$next_val"; and continue
+        set -l resolved
+        if string match -q '/*' $next_val
+            set resolved $next_val
+        else
+            set resolved (dirname $f)/$next_val
+        end
+        set -l rp (realpath $resolved 2>/dev/null)
+        test -n "$rp"; and set -a referenced $rp
+    end
+
+    # Roots = plan files not referenced by any other plan's next:
+    for f in $plan_files
+        if not contains $f $referenced
+            echo $f
+        end
     end
 end
 
