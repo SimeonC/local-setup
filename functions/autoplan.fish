@@ -1,8 +1,19 @@
 function autoplan --description "Iterative TDD loop driven by a linked list of markdown plan files"
-    # Re-launch inside tmux if not already running in a tmux session
+    # Re-launch inside tmux if not already running in a tmux session.
+    #
+    # The pane runs as a non-interactive `fish -c`, which has job control OFF, so
+    # every child (verify/test commands — e.g. playwright's server, which you stop
+    # with Ctrl-C) shares autoplan's process group. A bare Ctrl-C would deliver
+    # SIGINT to the whole group, killing autoplan along with the child — and since
+    # autoplan is the pane's only process, that ends the tmux session and closes
+    # the cmux tab. Guard against it: ignore SIGINT at the autoplan-shell level and
+    # turn job control on, so Ctrl-C kills only the current child and the whole
+    # autoplan loop survives. The guard lives only in this ephemeral pane shell, so
+    # it never leaks into an interactive session. (The already-in-tmux path below
+    # is interactive and so already job-controlled — no guard needed there.)
     if not set -q TMUX
         set -l escaped_args (string escape -- $argv)
-        exec tmux new-session fish -c "autoplan $escaped_args"
+        exec tmux new-session fish -c "function __autoplan_sigint_guard --on-signal INT; end; status job-control full; autoplan $escaped_args"
     end
 
     argparse 'max-fix-attempts=' 'max-verify-passes=' 'continue' -- $argv
