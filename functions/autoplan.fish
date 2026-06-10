@@ -11,10 +11,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     # autoplan loop survives. The guard lives only in this ephemeral pane shell, so
     # it never leaks into an interactive session. (The already-in-tmux path below
     # is interactive and so already job-controlled — no guard needed there.)
-    if not set -q TMUX
-        set -l escaped_args (string escape -- $argv)
-        exec tmux new-session fish -c "function __autoplan_sigint_guard --on-signal INT; end; status job-control full; autoplan $escaped_args"
-    end
+    set -l __autoplan_raw_args $argv
 
     argparse 'max-fix-attempts=' 'max-verify-passes=' 'continue' -- $argv
 
@@ -29,6 +26,11 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     else if test (count $argv) -eq 0
         echo "Usage: autoplan <plan-file> [--max-fix-attempts N] [--max-verify-passes N] [--continue]" >&2
         return 1
+    end
+
+    if not set -q TMUX
+        set -l escaped_args (string escape -- $__autoplan_raw_args)
+        exec tmux new-session fish -c "function __autoplan_sigint_guard --on-signal INT; end; status job-control full; autoplan $escaped_args"
     end
 
     set -l max_fix_attempts (set -q _flag_max_fix_attempts; and echo $_flag_max_fix_attempts; or echo 3)
