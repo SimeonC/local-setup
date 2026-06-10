@@ -18,12 +18,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     # Run-root anchoring: all state/tmp paths are relative to where autoplan is launched
     set -g __autoplan_root $PWD
 
-    if set -q _flag_continue
-        if not test -f $__autoplan_root/.autoplan-progress
-            echo "Error: No .autoplan-progress file found. Cannot --continue without it." >&2
-            return 1
-        end
-    else if test (count $argv) -eq 0
+    if not set -q _flag_continue; and test (count $argv) -eq 0
         echo "Usage: autoplan <plan-file|chain-dir> [--max-fix-attempts N] [--max-verify-passes N] [--continue]" >&2
         return 1
     end
@@ -54,27 +49,32 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     set -eg skip_to_phase
 
     if set -q _flag_continue
-        # Load state from .autoplan-progress
-        for _line in (cat $__autoplan_root/.autoplan-progress)
-            set -l _parts (string split -m 1 '=' $_line)
-            switch $_parts[1]
-                case plan;      set current_plan $_parts[2]
-                case phase;     set -g skip_to_phase $_parts[2]
-                case pr_title;  set pr_title $_parts[2]
+        if test -f $__autoplan_root/.autoplan-progress
+            # Load state from .autoplan-progress
+            for _line in (cat $__autoplan_root/.autoplan-progress)
+                set -l _parts (string split -m 1 '=' $_line)
+                switch $_parts[1]
+                    case plan;      set current_plan $_parts[2]
+                    case phase;     set -g skip_to_phase $_parts[2]
+                    case pr_title;  set pr_title $_parts[2]
+                end
             end
-        end
-    else if test -d $argv[1]
-        # Directory mode: auto-detect chain root among remaining plan files
-        set -l roots (__autoplan_find_root $argv[1])
-        set -l root_count (count $roots)
-        if test $root_count -eq 0
-            echo "✅ No plans remaining in $argv[1] — chain complete."
-            return 0
-        else if test $root_count -eq 1
-            set current_plan $roots[1]
         else
-            # Multiple roots: fzf chooser (interactive) or error (non-interactive / no fzf)
-            if test -t 0; and not set -q DEVCONTAINER; and type -q fzf
+            # No progress file: scan cwd, ./plans, and ./docs for incomplete plan roots
+            set -l scan_dirs $__autoplan_root
+            test -d $__autoplan_root/plans; and set -a scan_dirs $__autoplan_root/plans
+            test -d $__autoplan_root/docs;  and set -a scan_dirs $__autoplan_root/docs
+            set -l roots
+            for d in $scan_dirs
+                set -a roots (__autoplan_find_root $d)
+            end
+            set -l root_count (count $roots)
+            if test $root_count -eq 0
+                echo "✅ No plans found in cwd, plans/, or docs/ — nothing to continue."
+                return 0
+            else if test $root_count -eq 1
+                set current_plan $roots[1]
+            else if test -t 0; and not set -q DEVCONTAINER; and type -q fzf
                 set -l fzf_items
                 for r in $roots
                     set -l desc (__autoplan_frontmatter $r description)
@@ -86,18 +86,51 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 end
                 set -l chosen_line (printf '%s\n' $fzf_items \
                     | fzf --height=40% --reverse \
-                          --header="Multiple chain roots found — select one to run" 2>/dev/null)
+                          --header="Select a plan to run (pass a dir to filter)" 2>/dev/null)
                 if test $status -ne 0; or test -z "$chosen_line"
                     return 1
                 end
                 set current_plan (string split -m 1 '  — ' $chosen_line)[1]
             else
-                echo "Error: Multiple chain roots found in $argv[1] — cannot auto-select:" >&2
+                echo "Error: Multiple plans found — pass a directory to filter or select interactively:" >&2
                 for r in $roots
                     echo "  $r" >&2
                 end
                 return 1
             end
+        end
+    else if test -d $argv[1]
+        # Directory mode: scan that dir only for remaining chain roots
+        set -l roots (__autoplan_find_root $argv[1])
+        set -l root_count (count $roots)
+        if test $root_count -eq 0
+            echo "✅ No plans remaining in $argv[1] — chain complete."
+            return 0
+        else if test $root_count -eq 1
+            set current_plan $roots[1]
+        else if test -t 0; and not set -q DEVCONTAINER; and type -q fzf
+            set -l fzf_items
+            for r in $roots
+                set -l desc (__autoplan_frontmatter $r description)
+                if test -n "$desc"
+                    set -a fzf_items "$r  — $desc"
+                else
+                    set -a fzf_items $r
+                end
+            end
+            set -l chosen_line (printf '%s\n' $fzf_items \
+                | fzf --height=40% --reverse \
+                      --header="Multiple chain roots found — select one to run" 2>/dev/null)
+            if test $status -ne 0; or test -z "$chosen_line"
+                return 1
+            end
+            set current_plan (string split -m 1 '  — ' $chosen_line)[1]
+        else
+            echo "Error: Multiple chain roots found in $argv[1] — cannot auto-select:" >&2
+            for r in $roots
+                echo "  $r" >&2
+            end
+            return 1
         end
         # Phase resume: if .autoplan-progress refers to this plan, load phase + pr_title
         if test -f $__autoplan_root/.autoplan-progress
