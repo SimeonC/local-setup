@@ -3,7 +3,7 @@
 // @namespace   Local Scripts
 // @match       https://github.com/*
 // @grant       none
-// @version     1.4.17
+// @version     1.4.18
 // @author      -
 // @description 9/10/2025, 2:59:24 PM
 // ==/UserScript==
