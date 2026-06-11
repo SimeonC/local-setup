@@ -1,18 +1,4 @@
 function autoplan --description "Iterative TDD loop driven by a linked list of markdown plan files"
-    # Re-launch inside tmux if not already running in a tmux session.
-    #
-    # The pane runs as a non-interactive `fish -c`, which has job control OFF, so
-    # every child (verify/test commands — e.g. playwright's server, which you stop
-    # with Ctrl-C) shares autoplan's process group. A bare Ctrl-C would deliver
-    # SIGINT to the whole group, killing autoplan along with the child — and since
-    # autoplan is the pane's only process, that ends the tmux session and closes
-    # the cmux tab. Guard against it: ignore SIGINT at the autoplan-shell level and
-    # turn job control on, so Ctrl-C kills only the current child and the whole
-    # autoplan loop survives. The guard lives only in this ephemeral pane shell, so
-    # it never leaks into an interactive session. (The already-in-tmux path below
-    # is interactive and so already job-controlled — no guard needed there.)
-    set -l __autoplan_raw_args $argv
-
     argparse 'max-fix-attempts=' 'max-verify-passes=' 'continue' -- $argv
 
     # Run-root anchoring: all state/tmp paths are relative to where autoplan is launched
@@ -21,11 +7,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     if not set -q _flag_continue; and test (count $argv) -eq 0
         echo "Usage: autoplan <plan-file|chain-dir> [--max-fix-attempts N] [--max-verify-passes N] [--continue]" >&2
         return 1
-    end
-
-    if not set -q TMUX
-        set -l escaped_args (string escape -- $__autoplan_raw_args)
-        exec tmux new-session fish -c "function __autoplan_sigint_guard --on-signal INT; end; status job-control full; autoplan $escaped_args"
     end
 
     set -l max_fix_attempts (set -q _flag_max_fix_attempts; and echo $_flag_max_fix_attempts; or echo 3)
@@ -45,6 +26,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     # ===== SETUP =====
     set -l current_plan ""
     set -l pr_title ""
+    set -l snap_test_cmd ""
+    set -l snap_branch ""
+    set -l snap_cwd_raw ""
     # Clear any stale global skip_to_phase from a previous run in this session
     set -eg skip_to_phase
 
@@ -159,39 +143,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
     end
 
-    set -l test_cmd (__autoplan_frontmatter $current_plan test_cmd)
     if test -z "$pr_title"
         set pr_title (__autoplan_frontmatter $current_plan pr_title)
-    end
-    set -l prompts_path (__autoplan_frontmatter $current_plan prompts)
-    set -l env_files (__autoplan_frontmatter_list $current_plan env_files)
-    set -l manual_test_file (__autoplan_frontmatter $current_plan manual_test)
-    if test -n "$manual_test_file"
-        if not string match -q '/*' $manual_test_file
-            set manual_test_file (dirname $current_plan)/$manual_test_file
-        end
-        if not test -f "$manual_test_file"
-            echo "Error: manual_test file not found: $manual_test_file" >&2
-            return 1
-        end
-    end
-
-    if test -z "$test_cmd" -a -z "$manual_test_file"
-        echo "Error: Plan file must have test_cmd, manual_test, or both." >&2
-        return 1
-    end
-    if test (count $env_files) -gt 0; and not type -q dotenvx
-        echo "Error: Plan uses env_files but dotenvx is not installed. Install with: brew install dotenvx/brew/dotenvx" >&2
-        return 1
-    end
-    if test -n "$prompts_path"
-        if not string match -q '/*' $prompts_path
-            set prompts_path (dirname $current_plan)/$prompts_path
-        end
-        if not test -f "$prompts_path"
-            echo "Error: prompts file not found: $prompts_path" >&2
-            return 1
-        end
     end
 
     mkdir -p $__autoplan_root/tmp
@@ -206,34 +159,26 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
     # ===== MAIN LOOP (linked list traversal) =====
     while true
-        # Re-load per-plan overrides (test_cmd, prompts can be overridden)
-        set -l plan_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
-        if test -n "$plan_test_cmd"
-            set test_cmd $plan_test_cmd
+        # ===== PER-PLAN VALIDATION =====
+        set -l _val_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
+        set -l _val_manual_test (__autoplan_manual_test_file $current_plan)
+        set -l _val_prompts (__autoplan_prompts_path $current_plan)
+        set -l _val_env_files (__autoplan_frontmatter_list $current_plan env_files)
+        if test -z "$_val_test_cmd" -a -z "$_val_manual_test"
+            echo "Error: Plan file must have test_cmd, manual_test, or both: $current_plan" >&2
+            return 1
         end
-        set -l plan_prompts (__autoplan_frontmatter $current_plan prompts)
-        if test -n "$plan_prompts"
-            if not string match -q '/*' $plan_prompts
-                set prompts_path (dirname $current_plan)/$plan_prompts
-            else
-                set prompts_path $plan_prompts
-            end
+        if test -n "$_val_manual_test" -a ! -f "$_val_manual_test"
+            echo "Error: manual_test file not found: $_val_manual_test" >&2
+            return 1
         end
-        set -l plan_env_files (__autoplan_frontmatter_list $current_plan env_files)
-        if test (count $plan_env_files) -gt 0
-            set env_files $plan_env_files
-            if not type -q dotenvx
-                echo "Error: Plan uses env_files but dotenvx is not installed. Install with: brew install dotenvx/brew/dotenvx" >&2
-                return 1
-            end
+        if test -n "$_val_prompts" -a ! -f "$_val_prompts"
+            echo "Error: prompts file not found: $_val_prompts" >&2
+            return 1
         end
-        set -l plan_manual_test (__autoplan_frontmatter $current_plan manual_test)
-        if test -n "$plan_manual_test"
-            if not string match -q '/*' $plan_manual_test
-                set manual_test_file (dirname $current_plan)/$plan_manual_test
-            else
-                set manual_test_file $plan_manual_test
-            end
+        if test (count $_val_env_files) -gt 0; and not type -q dotenvx
+            echo "Error: Plan uses env_files but dotenvx is not installed. Install with: brew install dotenvx/brew/dotenvx" >&2
+            return 1
         end
 
         # ===== PER-PLAN CWD + BRANCH =====
@@ -342,9 +287,11 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             __autoplan_save_state $current_plan implement $pr_title
             echo "🛠️  Implement..."
 
+            set -l _pp (__autoplan_prompts_path $current_plan)
+            set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
             set -l impl_sub (__autoplan_build_user_prompt \
                 implement-prompt.md DOMAIN_IMPLEMENT implement \
-                "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
+                "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
             env -C $plan_cwd claude --permission-mode $permission_mode \
                 --append-system-prompt "$implement_system_prompt" "$impl_sub"
@@ -361,7 +308,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 echo ""
                 echo "🧪 Running tests..."
 
-                if __autoplan_run_tests $plan_cwd "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
+                set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                set -l _mf (__autoplan_manual_test_file $current_plan)
+                set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
+                if __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
                     echo "✅ Tests pass."
                     break
                 else
@@ -379,9 +329,11 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                     echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
 
+                    set -l _pp (__autoplan_prompts_path $current_plan)
+                    set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
                     set -l fix_prompt (__autoplan_build_user_prompt \
                         fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
-                        "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
+                        "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                     env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $fix_prompt"
                 end
@@ -410,18 +362,22 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                 rm -f $__autoplan_root/tmp/autoplan-verify-result.txt
 
+                set -l _pp (__autoplan_prompts_path $current_plan)
+                set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
                 set -l harden_sub (__autoplan_build_user_prompt \
                     harden-prompt.md DOMAIN_HARDEN harden \
-                    "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
+                    "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                 env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$harden_system_prompt" "$harden_sub"
 
                 echo ""
                 echo "🔎 Verify (audit-only, pass $verify_pass/$max_verify_passes)..."
 
+                set -l _pp (__autoplan_prompts_path $current_plan)
+                set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
                 set -l verify_sub (__autoplan_build_user_prompt \
                     verify-prompt.md DOMAIN_VERIFY verify \
-                    "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
+                    "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                 env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$verify_system_prompt" "$verify_sub"
 
@@ -436,9 +392,11 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 else if head -1 $__autoplan_root/tmp/autoplan-verify-result.txt | string match -qr '^ISSUES_FOUND'
                     echo "⚠️  Verify found issues. Fixing..."
 
+                    set -l _pp (__autoplan_prompts_path $current_plan)
+                    set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
                     set -l fix_verify_prompt (__autoplan_build_user_prompt \
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
-                        "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
+                        "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                     env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
 
@@ -448,7 +406,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
 
-                        if __autoplan_run_tests $plan_cwd "$test_cmd" $__autoplan_root/tmp/autoplan-test-output.txt "$manual_test_file" $env_files
+                        set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                        set -l _mf (__autoplan_manual_test_file $current_plan)
+                        set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
+                        if __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
                             echo "✅ Tests pass."
                             break
                         else
@@ -466,9 +427,11 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                             echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
 
+                            set -l _pp (__autoplan_prompts_path $current_plan)
+                            set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
                             set -l refix_prompt (__autoplan_build_user_prompt \
                                 fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
-                                "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
+                                "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                             env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $refix_prompt"
                         end
@@ -487,7 +450,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
             set -l verify_cmds (__autoplan_frontmatter_list $current_plan verify_cmds)
             if test (count $verify_cmds) -gt 0
-                set -l vc_env_prefix (__autoplan_env_prefix $env_files | string collect --allow-empty)
+                set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
+                set -l vc_env_prefix (__autoplan_env_prefix $_ef | string collect --allow-empty)
                 set -l vc_attempt 0
                 while true
                     set -l vc_failed_cmd ""
@@ -531,9 +495,11 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                     echo "⚠️  verify_cmd failing (attempt $vc_attempt/$max_fix_attempts). Fixing..."
 
+                    set -l _pp (__autoplan_prompts_path $current_plan)
+                    set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
                     set -l fix_vc_prompt (__autoplan_build_user_prompt \
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
-                        "$prompts_path" $current_plan $branch $test_cmd | string collect --allow-empty)
+                        "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                     env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model sonnet "/plan $fix_vc_prompt"
                 end
@@ -543,6 +509,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         # ===== PRE-COMMIT CLEANUP =====
         # Determine if the prompts file is safe to delete (not shared with other plans)
         set -l plan_dir (dirname $current_plan)
+        set -l prompts_path (__autoplan_prompts_path $current_plan)
+        set -l manual_test_file (__autoplan_manual_test_file $current_plan)
         set -l should_delete false
         if test -n "$prompts_path" -a -f "$prompts_path"
             set should_delete true
@@ -561,9 +529,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             end
         end
 
-        # Save next plan path and commit_msg BEFORE deleting plan file
+        # Save next plan path, commit_msg, and snapshots BEFORE deleting plan file
         set -l next_plan (__autoplan_frontmatter $current_plan next)
         set -l commit_msg (__autoplan_frontmatter $current_plan commit_msg)
+        set snap_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
+        set snap_branch   (__autoplan_frontmatter $current_plan branch)
+        set snap_cwd_raw  (__autoplan_frontmatter $current_plan cwd)
 
         # Delete manual_test instructions file
         if test -n "$manual_test_file" -a -f "$manual_test_file"
@@ -596,7 +567,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 # Fallback: no commit_msg in frontmatter → let Haiku author the commit
                 set -l commit_prompt (__autoplan_interpolate_prompt \
                     (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
-                    $current_plan $branch $test_cmd)
+                    $current_plan $branch $snap_test_cmd)
                 env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
             end
         end
@@ -627,9 +598,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         echo ""
         echo "🔍🚀 Chain review + PR orchestrator..."
 
-        # Re-read branch and cd into the final plan's repo
-        set -l branch (__autoplan_frontmatter $current_plan branch)
-        set -l final_cwd_raw (__autoplan_frontmatter $current_plan cwd)
+        # Use snapshotted branch/cwd (plan file already deleted)
+        set -l branch $snap_branch
+        set -l final_cwd_raw $snap_cwd_raw
         if test -z "$final_cwd_raw"
             set final_cwd_raw .
         end
@@ -654,7 +625,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         if test -n "$pr_title"
             set -l pr_body_sub (__autoplan_interpolate_prompt \
                 (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
-                $current_plan $branch $test_cmd)
+                $current_plan $branch $snap_test_cmd)
 
             set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
             set -l team_name "autoplan-cr-$team_slug"
@@ -732,6 +703,23 @@ function __autoplan_frontmatter_list --argument-names plan_file key --descriptio
         }
         collecting && (/^[A-Za-z_][A-Za-z0-9_]*:/ || /^---$/) { collecting = 0 }
     ' | sed 's/^"\(.*\)"$/\1/'
+end
+
+function __autoplan_resolve_rel --argument-names plan_file raw --description "Resolve a path relative to plan_file dir; absolute paths pass through; empty returns empty"
+    test -z "$raw"; and return
+    if string match -q '/*' $raw
+        echo $raw
+    else
+        echo (dirname $plan_file)/$raw
+    end
+end
+
+function __autoplan_manual_test_file --argument-names plan_file --description "Resolve manual_test frontmatter path relative to plan_file dir"
+    __autoplan_resolve_rel $plan_file (__autoplan_frontmatter $plan_file manual_test)
+end
+
+function __autoplan_prompts_path --argument-names plan_file --description "Resolve prompts frontmatter path relative to plan_file dir"
+    __autoplan_resolve_rel $plan_file (__autoplan_frontmatter $plan_file prompts)
 end
 
 function __autoplan_load_prompt --argument-names prompts_file stage --description "Load a prompt section from a prompts file"
