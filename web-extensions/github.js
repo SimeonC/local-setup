@@ -287,8 +287,8 @@ function addHeaderButtons() {
       getOptions: (element) => {
         const branchLink = Array.from(element.querySelectorAll(branchTagSelector)).at(-1);
         if (!branchLink) return;
-        const branchParts = branchLink.getAttribute("href").split("/");
-        const branchName = branchParts[branchParts.length - 1];
+        const branchName = branchLink.getAttribute("href").split("/tree/")[1];
+        if (!branchName) return;
         const href = branchNameToDeploymentHref(branchName);
         if (!href) return;
         return {
