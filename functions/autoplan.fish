@@ -1,13 +1,8 @@
 function autoplan --description "Iterative TDD loop driven by a linked list of markdown plan files"
-    argparse 'max-fix-attempts=' 'max-verify-passes=' 'continue' -- $argv
+    argparse 'max-fix-attempts=' 'max-verify-passes=' -- $argv
 
     # Run-root anchoring: all state/tmp paths are relative to where autoplan is launched
     set -g __autoplan_root $PWD
-
-    if not set -q _flag_continue; and test (count $argv) -eq 0
-        echo "Usage: autoplan <plan-file|chain-dir> [--max-fix-attempts N] [--max-verify-passes N] [--continue]" >&2
-        return 1
-    end
 
     set -l max_fix_attempts (set -q _flag_max_fix_attempts; and echo $_flag_max_fix_attempts; or echo 3)
     set -l max_verify_passes (set -q _flag_max_verify_passes; and echo $_flag_max_verify_passes; or echo 3)
@@ -32,7 +27,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     # Clear any stale global skip_to_phase from a previous run in this session
     set -eg skip_to_phase
 
-    if set -q _flag_continue
+    if test (count $argv) -eq 0
         if test -f $__autoplan_root/.autoplan-progress
             # Load state from .autoplan-progress
             for _line in (cat $__autoplan_root/.autoplan-progress)
@@ -589,7 +584,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 return 1
             end
             set current_plan $next_plan
-            # Update state so --continue resumes at the next plan's implement
+            # Update state so a no-arg autoplan resumes at the next plan's implement
             __autoplan_save_state $current_plan implement $pr_title
         else
             break
@@ -829,7 +824,7 @@ function __autoplan_save_state --argument-names plan phase pr_title
     echo "phase=$phase" >> $__autoplan_root/.autoplan-progress
     echo "pr_title=$pr_title" >> $__autoplan_root/.autoplan-progress
     set_color brblack
-    echo "↩️  Resume from this phase ($phase) with: autoplan --continue"
+    echo "↩️  Resume from this phase ($phase) with: autoplan"
     set_color normal
 end
 
