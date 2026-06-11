@@ -17,6 +17,7 @@ brew install gum
 brew install mdcat
 brew install glow
 brew install dotenvx/brew/dotenvx # required by autoplan's env_files frontmatter
+brew install yq # required by autoplan's frontmatter parsing
 ```
 
 ### Setup Colima (Docker)

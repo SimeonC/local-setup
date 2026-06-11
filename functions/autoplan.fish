@@ -159,7 +159,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     # ===== MAIN LOOP (linked list traversal) =====
     while true
         # ===== PER-PLAN VALIDATION =====
-        set -l _val_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
+        set -l _val_test_cmd (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
         set -l _val_manual_test (__autoplan_manual_test_file $current_plan)
         set -l _val_prompts (__autoplan_prompts_path $current_plan)
         set -l _val_env_files (__autoplan_frontmatter_list $current_plan env_files)
@@ -287,7 +287,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "🛠️  Implement..."
 
             set -l _pp (__autoplan_prompts_path $current_plan)
-            set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+            set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
             set -l impl_sub (__autoplan_build_user_prompt \
                 implement-prompt.md DOMAIN_IMPLEMENT implement \
                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -307,7 +307,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 echo ""
                 echo "🧪 Running tests..."
 
-                set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                 set -l _mf (__autoplan_manual_test_file $current_plan)
                 set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
                 if __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
@@ -329,7 +329,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
 
                     set -l _pp (__autoplan_prompts_path $current_plan)
-                    set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                     set -l fix_prompt (__autoplan_build_user_prompt \
                         fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -362,7 +362,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 rm -f $__autoplan_root/tmp/autoplan-verify-result.txt
 
                 set -l _pp (__autoplan_prompts_path $current_plan)
-                set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                 set -l harden_sub (__autoplan_build_user_prompt \
                     harden-prompt.md DOMAIN_HARDEN harden \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -373,7 +373,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 echo "🔎 Verify (audit-only, pass $verify_pass/$max_verify_passes)..."
 
                 set -l _pp (__autoplan_prompts_path $current_plan)
-                set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                 set -l verify_sub (__autoplan_build_user_prompt \
                     verify-prompt.md DOMAIN_VERIFY verify \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -392,7 +392,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     echo "⚠️  Verify found issues. Fixing..."
 
                     set -l _pp (__autoplan_prompts_path $current_plan)
-                    set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                     set -l fix_verify_prompt (__autoplan_build_user_prompt \
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -405,7 +405,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
 
-                        set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                        set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                         set -l _mf (__autoplan_manual_test_file $current_plan)
                         set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
                         if __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
@@ -427,7 +427,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                             echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
 
                             set -l _pp (__autoplan_prompts_path $current_plan)
-                            set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                            set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                             set -l refix_prompt (__autoplan_build_user_prompt \
                                 fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -495,7 +495,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     echo "⚠️  verify_cmd failing (attempt $vc_attempt/$max_fix_attempts). Fixing..."
 
                     set -l _pp (__autoplan_prompts_path $current_plan)
-                    set -l _tc (__autoplan_frontmatter $current_plan test_cmd)
+                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                     set -l fix_vc_prompt (__autoplan_build_user_prompt \
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -531,7 +531,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         # Save next plan path, commit_msg, and snapshots BEFORE deleting plan file
         set -l next_plan (__autoplan_frontmatter $current_plan next)
         set -l commit_msg (__autoplan_frontmatter $current_plan commit_msg)
-        set snap_test_cmd (__autoplan_frontmatter $current_plan test_cmd)
+        set snap_test_cmd (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
         set snap_branch   (__autoplan_frontmatter $current_plan branch)
         set snap_cwd_raw  (__autoplan_frontmatter $current_plan cwd)
 
@@ -685,23 +685,11 @@ function __autoplan_compose_system --description "Concatenate prompt-block files
 end
 
 function __autoplan_frontmatter --argument-names plan_file key --description "Extract a frontmatter value from a plan file"
-    sed -n '/^---$/,/^---$/p' $plan_file | grep "^$key:" | sed "s/^$key: *//" | tr -d '"' | string trim
+    yq --front-matter=extract ".$key // \"\"" $plan_file
 end
 
-function __autoplan_frontmatter_list --argument-names plan_file key --description "Extract a YAML list frontmatter value (one shell command per line)"
-    # Reads the frontmatter block between the first two `---` lines.
-    # Matches a key followed by `:` on its own line (no inline value), then
-    # collects subsequent lines starting with `  - ` (2-space indent + dash)
-    # until any other top-level frontmatter key or the closing `---`.
-    sed -n '/^---$/,/^---$/p' $plan_file | awk -v k="$key" '
-        $0 == k ":" { collecting = 1; next }
-        collecting && /^  *- / {
-            sub(/^  *- */, "", $0)
-            print
-            next
-        }
-        collecting && (/^[A-Za-z_][A-Za-z0-9_]*:/ || /^---$/) { collecting = 0 }
-    ' | sed 's/^"\(.*\)"$/\1/'
+function __autoplan_frontmatter_list --argument-names plan_file key --description "Extract a YAML scalar-or-list frontmatter value (one item per line)"
+    yq --front-matter=extract "[.$key] | flatten | .[] | select(. != null)" $plan_file
 end
 
 function __autoplan_resolve_rel --argument-names plan_file raw --description "Resolve a path relative to plan_file dir; absolute paths pass through; empty returns empty"
@@ -779,7 +767,7 @@ function __autoplan_run_tests --argument-names plan_cwd test_cmd output_file man
     if test -n "$test_cmd"
         echo "# Auto Tests" >>$output_file
         echo "=====" >>$output_file
-        for cmd in (string split '&&' -- $test_cmd)
+        for cmd in (string split \n -- $test_cmd)
             set cmd (string trim $cmd)
             test -z "$cmd"; and continue
             echo "▶ $env_prefix$cmd" | tee -a $output_file
