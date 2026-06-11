@@ -44,10 +44,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 end
             end
         else
-            # No progress file: scan cwd, ./plans, and ./docs for incomplete plan roots
+            # No progress file: scan cwd (top-level) + plans/ and docs/ (recursive) for incomplete plan roots
             set -l scan_dirs $__autoplan_root
-            test -d $__autoplan_root/plans; and set -a scan_dirs $__autoplan_root/plans
-            test -d $__autoplan_root/docs;  and set -a scan_dirs $__autoplan_root/docs
+            for base in plans docs
+                test -d $__autoplan_root/$base; or continue
+                for d in (find $__autoplan_root/$base -type d 2>/dev/null)
+                    set -a scan_dirs $d
+                end
+            end
             set -l roots
             for d in $scan_dirs
                 set -a roots (__autoplan_find_root $d)
