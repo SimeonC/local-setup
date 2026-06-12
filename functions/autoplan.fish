@@ -567,7 +567,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set -l commit_prompt (__autoplan_interpolate_prompt \
                     (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                     $current_plan $branch $snap_test_cmd)
-                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+                env -C $plan_cwd claude -p --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
             end
         end
 
