@@ -12,7 +12,7 @@ For each plan, check all required frontmatter fields are present and non-empty:
 - `description` — must be a quoted single-line string (2-3 sentences). If missing, generate one from the plan's Context + Scope sections and add it.
 - `commit_msg` — must be a quoted single-line gitmoji message. If missing, generate one from the plan's title/Context/Scope and add it. Use gitmoji conventions: `✨` new feature, `🐛` bug fix, `♻️` refactor, `🔧` config/tooling, `📝` docs, `✅` tests, `🚀` performance, `🔥` remove, `💄` UI/style, `🔒` security.
 - `test_cmd` (or `manual_test`), `prompts` — flag any missing as errors.
-- `branch:` — optional; omitting or `<current>` = adopt-current mode. Flag any `create_branch:` key as deprecated and remove it.
+- `branch:` — optional; omitting = adopt-current with interactive chooser; `<current>` = adopt-current silently (no chooser). Flag any `create_branch:` key as deprecated and remove it.
 - `cwd:` — if set, verify the path exists relative to the run root. If `test_cmd` or `verify_cmds` contain a `cd <subdir> &&` prefix that matches `cwd:`, flag as redundant and remove.
 
 ## Step 3: Chain Integrity

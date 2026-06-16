@@ -5,7 +5,7 @@
 ```yaml
 ---
 description: "2-3 sentence summary of what this plan does and why."  # required — shown in progress output
-branch: feat/...           # optional — git branch intent: present = ensure/create this branch; omit or `<current>` = adopt the repo's current checkout (with interactive per-cwd chooser)
+branch: feat/...           # optional — git branch intent: present = ensure/create this branch; omit = adopt current checkout (interactive per-cwd chooser); `<current>` = adopt silently (no chooser)
 test_cmd: npm run test:ai   # required — command(s) to run tests
 manual_test: ./plan-name.manual.md  # optional — path to manual test instructions file
 pr_title: "..."             # optional — PR title string; omit to skip PR creation (commits only)
@@ -35,7 +35,8 @@ commit_msg: "✨ Add ..."     # required — single-line gitmoji commit message 
 `branch:` encodes intent, not just a name:
 
 - **`branch: <name>`** — ensure this branch: checkout if present locally; if absent and not resuming, create from `origin/main` (dirty-tree guard + `git fetch origin main` first).
-- **`branch:` omitted OR `branch: <current>`** — adopt-current mode: use whatever branch the repo is currently on. On first encounter per repo per run (in an interactive terminal with `fzf` installed), a searchable chooser appears pre-filled with the current branch; press Enter to keep it, or type a new name to create it off HEAD. Subsequent plans with the same `cwd:` skip the chooser. Degrades silently if non-interactive or `fzf` is missing.
+- **`branch: <current>`** — adopt-current mode, **silent**: use whatever branch the repo is on, no chooser prompt.
+- **`branch:` omitted** — adopt-current mode, **interactive**: a searchable fzf chooser appears pre-filled with the current branch; press Enter to keep it, or type a new name to create it off HEAD. Degrades silently if non-interactive or `fzf` is missing.
 
 ### verify_cmds: Deterministic Verification Commands
 

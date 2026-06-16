@@ -23,10 +23,9 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         echo "command claude" (string escape -- $claude_args) > $tmpscript
         # Pass command directly to new-session (not send-keys) so it's never typed
         # into an interactive shell and never recorded in history.
-        # fish --private disables history for the session; exec fish hands back
-        # a normal interactive shell after claude exits.
+        # fish --private disables history for the session; tmux exits when claude exits.
         tmux new-session -d -s $sess_name -x (tput cols) -y (tput lines) \
-            fish --private -c "source $tmpscript; rm $tmpscript; exec fish"
+            fish --private -c "source $tmpscript; rm $tmpscript"
         tmux set-option -wt $sess_name automatic-rename off
         tmux rename-window -t $sess_name "$short_cwd"
         tmux set-option -g set-titles on 2>/dev/null
