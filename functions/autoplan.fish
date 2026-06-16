@@ -295,8 +295,13 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 implement-prompt.md DOMAIN_IMPLEMENT implement \
                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-            env -C $plan_cwd claude -p --permission-mode $permission_mode \
-                --append-system-prompt "$implement_system_prompt" "$impl_sub"
+            rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+            env -C $plan_cwd claude -p --output-format stream-json --verbose \
+                --name (__autoplan_session_name $current_plan implement) \
+                --permission-mode $permission_mode --model 'opus[1m]' \
+                --append-system-prompt "$implement_system_prompt" "$impl_sub" | format-claude-stream
+            set -l _st $pipestatus[1]
+            if __autoplan_step_failed $_st; return 1; end
 
             echo "✅ Implement complete."
         end
@@ -313,9 +318,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                 set -l _mf (__autoplan_manual_test_file $current_plan)
                 set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
-                if __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
+                __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
+                set -l _run_st $status
+                if test $_run_st -eq 0
                     echo "✅ Tests pass."
                     break
+                else if test $_run_st -eq 130
+                    echo "⚠️  Test run interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
                 else
                     set fix_attempt (math $fix_attempt + 1)
                     if test $fix_attempt -ge $max_fix_attempts
@@ -337,7 +347,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $fix_prompt"
+                    rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                    env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-test) --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $fix_prompt"
+                    set -l _st $status
+                    if __autoplan_step_failed $_st; return 1; end
                 end
             end
         end
@@ -370,7 +383,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     harden-prompt.md DOMAIN_HARDEN harden \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$harden_system_prompt" "$harden_sub"
+                rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan harden) --permission-mode $permission_mode --append-system-prompt "$harden_system_prompt" "$harden_sub"
+                set -l _st $status
+                if __autoplan_step_failed $_st; return 1; end
 
                 echo ""
                 echo "🔎 Verify (audit-only, pass $verify_pass/$max_verify_passes)..."
@@ -381,7 +397,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     verify-prompt.md DOMAIN_VERIFY verify \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$verify_system_prompt" "$verify_sub"
+                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan verify) --permission-mode $permission_mode --append-system-prompt "$verify_system_prompt" "$verify_sub"
+                set -l _verify_st $status
+                if test $_verify_st -eq 130
+                    echo "⚠️  Verify interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
+                end
 
                 if not test -f $__autoplan_root/tmp/autoplan-verify-result.txt
                     echo "❌ Verify did not write sentinel file." >&2
@@ -400,7 +421,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
+                    rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                    env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
+                    set -l _st $status
+                    if __autoplan_step_failed $_st; return 1; end
 
                     # Reset fix attempts and go back through test/fix loop
                     set fix_attempt 0
@@ -411,9 +435,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                         set -l _mf (__autoplan_manual_test_file $current_plan)
                         set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
-                        if __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
+                        __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
+                        set -l _run_st $status
+                        if test $_run_st -eq 0
                             echo "✅ Tests pass."
                             break
+                        else if test $_run_st -eq 130
+                            echo "⚠️  Test run interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                            return 1
                         else
                             set fix_attempt (math $fix_attempt + 1)
                             if test $fix_attempt -ge $max_fix_attempts
@@ -435,7 +464,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                                 fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                            env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $refix_prompt"
+                            rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                            env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-test) --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $refix_prompt"
+                            set -l _st $status
+                            if __autoplan_step_failed $_st; return 1; end
                         end
                     end
                     # Continue verify loop
@@ -464,6 +496,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         env -C $plan_cwd CI=true fish -c $vc_env_prefix$vc >$__autoplan_root/tmp/autoplan-verify-cmd-raw.txt 2>&1
                         set vc_failed_status $status
                         cat $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
+                        if test $vc_failed_status -eq 130
+                            echo "⚠️  verify_cmd interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                            return 1
+                        end
                         if test $vc_failed_status -ne 0
                             set vc_failed_cmd $vc
                             break
@@ -503,7 +539,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model opusplan "/plan $fix_vc_prompt"
+                    rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                    env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-verify-cmd) --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model opusplan "/plan $fix_vc_prompt"
+                    set -l _st $status
+                    if __autoplan_step_failed $_st; return 1; end
                 end
             end
         end
@@ -570,7 +609,13 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set -l commit_prompt (__autoplan_interpolate_prompt \
                     (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                     $current_plan $branch $snap_test_cmd)
-                env -C $plan_cwd claude -p --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model haiku --effort medium "$commit_prompt"
+                rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                env -C $plan_cwd claude -p --output-format stream-json --verbose \
+                    --name (__autoplan_session_name $current_plan commit) \
+                    --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" \
+                    --model haiku --effort medium "$commit_prompt" | format-claude-stream
+                set -l _st $pipestatus[1]
+                if __autoplan_step_failed $_st; return 1; end
             end
         end
 
@@ -605,7 +650,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
                     | string replace -a -- '$TEAM_NAME' "$team_name")
 
-                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
+                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
+                set -l _cr_st $status
+                if test $_cr_st -eq 130
+                    echo "⚠️  Chain review interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
+                end
 
                 git -C $plan_cwd push origin $branch
 
@@ -617,6 +667,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
                 end
             else
+                set -l _step_log $__autoplan_root/tmp/autoplan-step-result.txt
                 set -l review_only_prompt "Review the completed autoplan chain on branch \`$branch\`.
 
 ## Review commits
@@ -624,9 +675,14 @@ Run: git log --oneline origin/main..$branch
 Verify the commits look complete and nothing was obviously missed.
 
 ## Summary
-Print a brief summary of what was completed and flag anything that looks incomplete."
+Print a brief summary of what was completed and flag anything that looks incomplete.
 
-                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$review_only_prompt"
+When you have fully completed this task, write exactly \`ALL_GOOD\` (and nothing else) to \`$_step_log\`. If you stop early, are interrupted, or cannot complete it, do NOT write \`ALL_GOOD\` — write a one-line reason to \`$_step_log\` instead."
+
+                rm -f $_step_log
+                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan review-only) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$review_only_prompt"
+                set -l _st $status
+                if __autoplan_step_failed $_st; return 1; end
                 echo "ℹ️  No pr_title — skipping PR creation."
             end
         end
@@ -745,6 +801,7 @@ function __autoplan_interpolate_prompt --description "Interpolate variables in a
         | string replace -a -- '$PLAN_FILE' "$plan_file" \
         | string replace -a -- '$TEST_LOG' "$__autoplan_root/tmp/autoplan-test-output.txt" \
         | string replace -a -- '$VERIFY_LOG' "$__autoplan_root/tmp/autoplan-verify-result.txt" \
+        | string replace -a -- '$STEP_LOG' "$__autoplan_root/tmp/autoplan-step-result.txt" \
         | string replace -a -- '$BRANCH' "$branch_name" \
         | string replace -a -- '$TEST_CMD' "$test_cmd_val" \
         | string replace -a -- '$VERIFY_CMD_LOG' "$__autoplan_root/tmp/autoplan-verify-cmd-output.txt"
@@ -761,7 +818,10 @@ function __autoplan_run_tests --argument-names plan_cwd test_cmd output_file man
             test -z "$cmd"; and continue
             echo "▶ $env_prefix$cmd" | tee -a $output_file
             env -C $plan_cwd fish -c $env_prefix$cmd 2>&1 | tee -a $output_file
-            if test $pipestatus[1] -ne 0
+            set -l _cmd_st $pipestatus[1]
+            if test $_cmd_st -eq 130
+                return 130
+            else if test $_cmd_st -ne 0
                 return 1
             end
         end
@@ -772,7 +832,10 @@ function __autoplan_run_tests --argument-names plan_cwd test_cmd output_file man
         echo "=====" >>$output_file
         echo "▶ manual_test $manual_test_file" | tee -a $output_file
         env -C $plan_cwd fish -c "manual_test $manual_test_file" 2>&1 | tee -a $output_file
-        if test $pipestatus[1] -ne 0
+        set -l _mt_st $pipestatus[1]
+        if test $_mt_st -eq 130
+            return 130
+        else if test $_mt_st -ne 0
             return 1
         end
     end
@@ -803,6 +866,30 @@ function __autoplan_save_state --argument-names plan phase pr_title
     set_color brblack
     echo "↩️  Resume from this phase ($phase) with: autoplan"
     set_color normal
+end
+
+function __autoplan_step_failed --argument-names exit_status --description "Check if a Claude step failed/was interrupted; prints reason; returns 0=abort 1=ok"
+    if test $exit_status -eq 130
+        echo "⚠️  Step interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+        return 0
+    end
+    if not test -f $__autoplan_root/tmp/autoplan-step-result.txt
+        echo "⚠️  Step did not write completion sentinel. Stopping without advancing state. Resume with: autoplan" >&2
+        return 0
+    end
+    if not head -1 $__autoplan_root/tmp/autoplan-step-result.txt | string match -qr '^ALL_GOOD'
+        echo "⚠️  Step completion sentinel is not ALL_GOOD:" >&2
+        cat $__autoplan_root/tmp/autoplan-step-result.txt >&2
+        echo "Stopping without advancing state. Resume with: autoplan" >&2
+        return 0
+    end
+    return 1
+end
+
+function __autoplan_session_name --argument-names plan_file phase --description "Build a claude --name label: autoplan:<plan-slug>:<phase>"
+    set -l slug (string replace -r '\.md$' '' -- (basename $plan_file))
+    set slug (string replace -ra '[^A-Za-z0-9_-]' '-' -- $slug)
+    echo "autoplan:$slug:$phase"
 end
 
 function __autoplan_phase_index --argument-names phase

@@ -16,3 +16,5 @@ The commit message should be a short summary of what changed and why — referen
 ## Rules
 
 - Do NOT amend previous commits — always create new commits.
+
+When you have fully completed this task, write exactly `ALL_GOOD` (and nothing else) to `$STEP_LOG`. If you stop early, are interrupted, or cannot complete it, do NOT write `ALL_GOOD` — write a one-line reason to `$STEP_LOG` instead.
