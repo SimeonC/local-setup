@@ -378,10 +378,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                     env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-test) --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $fix_prompt"
                     set -l _st $status
-                    if __autoplan_step_failed $_st; return 1; end
+                    if __autoplan_step_interrupted $_st; return 1; end
                 end
             end
         end
@@ -452,10 +451,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                     env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
                     set -l _st $status
-                    if __autoplan_step_failed $_st; return 1; end
+                    if __autoplan_step_interrupted $_st; return 1; end
 
                     # Reset fix attempts and go back through test/fix loop
                     set fix_attempt 0
@@ -495,10 +493,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                                 fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                            rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                             env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-test) --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $refix_prompt"
                             set -l _st $status
-                            if __autoplan_step_failed $_st; return 1; end
+                            if __autoplan_step_interrupted $_st; return 1; end
                         end
                     end
                     # Continue verify loop
@@ -570,10 +567,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                     env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-verify-cmd) --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model opusplan "/plan $fix_vc_prompt"
                     set -l _st $status
-                    if __autoplan_step_failed $_st; return 1; end
+                    if __autoplan_step_interrupted $_st; return 1; end
                 end
             end
         end
@@ -927,6 +923,14 @@ function __autoplan_step_failed --argument-names exit_status --description "Chec
         echo "⚠️  Step completion sentinel is not ALL_GOOD:" >&2
         cat $__autoplan_root/tmp/autoplan-step-result.txt >&2
         echo "Stopping without advancing state. Resume with: autoplan" >&2
+        return 0
+    end
+    return 1
+end
+
+function __autoplan_step_interrupted --argument-names exit_status --description "Abort only on Ctrl-C (130); used for plan-mode fix steps that can't write a sentinel. returns 0=abort 1=ok"
+    if test $exit_status -eq 130
+        echo "⚠️  Step interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
         return 0
     end
     return 1
