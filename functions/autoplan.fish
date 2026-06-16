@@ -149,6 +149,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     mkdir -p $__autoplan_root/tmp
 
     set -l base_system_prompt (__autoplan_compose_system base)
+    set -l prototype_system_prompt      (__autoplan_compose_system base stage-restrictions prototype)
     set -l implement_system_prompt     (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity implement)
     set -l fix_test_system_prompt      (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity refactor-confirm fix-test)
     set -l fix_verify_system_prompt    (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity refactor-confirm fix-verify)
@@ -283,6 +284,36 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # Re-read pr_title per plan
         set pr_title (__autoplan_frontmatter $current_plan pr_title)
+
+        # ===== PROTOTYPE (interactive, opt-in) =====
+        if test "$(__autoplan_frontmatter $current_plan prototype)" = true
+            if not __autoplan_check_skip prototype
+                __autoplan_save_state $current_plan prototype $pr_title
+                echo "🎨 Prototype (interactive)..."
+                set -l sandbox (__autoplan_ensure_prototype_sandbox)
+                set -l port (__autoplan_free_port)
+                set -l srv_pid (__autoplan_prototype_server_start $sandbox $port)
+                if test $status -ne 0
+                    echo "⚠️  Failed to start prototype server. Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
+                end
+                set -l proto_dir $sandbox/src/prototypes
+                set -l proto_url "http://localhost:$port"
+                set -l _pp (__autoplan_prompts_path $current_plan)
+                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                set -l proto_sub (__autoplan_build_user_prompt \
+                    prototype-prompt.md DOMAIN_PROTOTYPE prototype \
+                    "$_pp" $current_plan $branch "$_tc" "$proto_dir" "$proto_url" | string collect --allow-empty)
+                rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan prototype) \
+                    --permission-mode $permission_mode --model 'opus[1m]' \
+                    --append-system-prompt "$prototype_system_prompt" "$proto_sub"
+                set -l _st $status
+                __autoplan_prototype_server_stop $srv_pid
+                if __autoplan_step_failed $_st; return 1; end
+                echo "✅ Prototype complete."
+            end
+        end
 
         # ===== IMPLEMENT =====
         if not __autoplan_check_skip implement
@@ -763,7 +794,7 @@ function __autoplan_load_prompt --argument-names prompts_file stage --descriptio
 end
 
 function __autoplan_build_user_prompt --description "Build a phase user prompt: load reference template, substitute DOMAIN section + vars"
-    # Usage: __autoplan_build_user_prompt <ref-filename> <domain-var-name> <section> <prompts_path> <plan_file> <branch> <test_cmd>
+    # Usage: __autoplan_build_user_prompt <ref-filename> <domain-var-name> <section> <prompts_path> <plan_file> <branch> <test_cmd> [proto_dir] [proto_url]
     set -l ref_name $argv[1]
     set -l domain_var $argv[2]
     set -l section $argv[3]
@@ -771,6 +802,14 @@ function __autoplan_build_user_prompt --description "Build a phase user prompt: 
     set -l plan_file $argv[5]
     set -l branch $argv[6]
     set -l test_cmd $argv[7]
+    set -l proto_dir ""
+    set -l proto_url ""
+    if test (count $argv) -ge 8
+        set proto_dir $argv[8]
+    end
+    if test (count $argv) -ge 9
+        set proto_url $argv[9]
+    end
 
     set -l domain_lines (__autoplan_load_prompt "$prompts_path" $section)
     set -l domain_text (string join \n -- $domain_lines | string collect)
@@ -781,7 +820,14 @@ function __autoplan_build_user_prompt --description "Build a phase user prompt: 
     set -l body (cat "$HOME/.claude/skills/autoplan/references/$ref_name" \
         | string replace -a -- "\$$domain_var" "$domain_text" \
         | string collect --allow-empty)
-    __autoplan_interpolate_prompt "$body" $plan_file $branch $test_cmd
+
+    # Standard variable interpolation (plan_file, branch, test_cmd, log paths)
+    set -l interpolated (__autoplan_interpolate_prompt "$body" $plan_file $branch $test_cmd)
+
+    # Prototype-specific substitutions (no-op when empty; harness-only vars not in __autoplan_interpolate_prompt)
+    printf '%s\n' $interpolated \
+        | string replace -a -- '$PROTOTYPE_DIR' "$proto_dir" \
+        | string replace -a -- '$PROTOTYPE_URL' "$proto_url"
 end
 
 function __autoplan_interpolate_prompt --description "Interpolate variables in a prompt string"
@@ -894,12 +940,13 @@ end
 
 function __autoplan_phase_index --argument-names phase
     switch $phase
-        case implement;       echo 1
-        case test_fix;        echo 2
-        case harden_verify;   echo 3
-        case verify_cmds;     echo 4
-        case commit;          echo 5
-        case chain_review_pr; echo 6
+        case prototype;       echo 1
+        case implement;       echo 2
+        case test_fix;        echo 3
+        case harden_verify;   echo 4
+        case verify_cmds;     echo 5
+        case commit;          echo 6
+        case chain_review_pr; echo 7
         case '*';             echo 0
     end
 end
@@ -955,4 +1002,118 @@ function __autoplan_check_skip --argument-names phase
     # Reached or passed target — clear skip and run
     set -eg skip_to_phase
     return 1  # Run this phase
+end
+
+function __autoplan_mise_prefix --argument-names sandbox --description "Emit 'mise exec -- ' when mise is installed and sandbox has .tool-versions; else empty"
+    if type -q mise; and test -f $sandbox/.tool-versions
+        echo "mise exec -- "
+    end
+end
+
+function __autoplan_prototype_sandbox --description "Echo the working sandbox path"
+    set -l data_home
+    if set -q XDG_DATA_HOME
+        set data_home $XDG_DATA_HOME
+    else
+        set data_home $HOME/.local/share
+    end
+    echo $data_home/autoplan-prototype
+end
+
+function __autoplan_ensure_prototype_sandbox --description "Idempotent: create working sandbox, sync template files, install if needed"
+    set -l template $HOME/.config/fish/autoplan_prototype_template
+    set -l sandbox (__autoplan_prototype_sandbox)
+
+    mkdir -p $sandbox/src/prototypes
+
+    # Sync template files (copy when missing or template is newer)
+    for src in $template/package.json $template/vite.config.js $template/index.html $template/.tool-versions
+        set -l dst $sandbox/(basename $src)
+        if not test -f $dst; or test $src -nt $dst
+            cp $src $dst
+        end
+    end
+    for src in $template/src/main.js $template/src/app.css $template/src/App.svelte
+        set -l dst $sandbox/src/(basename $src)
+        if not test -f $dst; or test $src -nt $dst
+            cp $src $dst
+        end
+    end
+    if not test -f $sandbox/src/prototypes/.gitkeep
+        cp $template/src/prototypes/.gitkeep $sandbox/src/prototypes/.gitkeep
+    end
+
+    # Install node_modules when missing or package.json was just updated
+    set -l pkg_src $template/package.json
+    set -l pkg_dst $sandbox/package.json
+    set -l nm $sandbox/node_modules
+    if not test -d $nm; or test $pkg_src -nt $nm
+        echo "📦 Installing prototype sandbox dependencies..."
+        set -l mise_prefix (__autoplan_mise_prefix $sandbox)
+        env -C $sandbox fish -c "{$mise_prefix}npm install" >/dev/null
+    end
+
+    echo $sandbox
+end
+
+function __autoplan_free_port --description "Find a free TCP port starting from 5199"
+    set -l port 5199
+    while nc -z localhost $port 2>/dev/null
+        set port (math $port + 1)
+    end
+    echo $port
+end
+
+function __autoplan_prototype_server_start --argument-names sandbox port --description "Wipe prototypes, start Vite dev server, poll until ready, echo pid"
+    # Wipe scratch dir (keep .gitkeep)
+    for f in $sandbox/src/prototypes/*.svelte
+        rm -f $f
+    end
+
+    mkdir -p $sandbox/tmp
+    set -l log $sandbox/tmp/autoplan-prototype-server.log
+    set -l mise_prefix (__autoplan_mise_prefix $sandbox)
+
+    # Start server in background
+    env -C $sandbox fish -c "{$mise_prefix}npm run dev -- --port $port --strictPort" >$log 2>&1 &
+    set -l srv_pid $last_pid
+
+    # Poll until the server responds (up to 10s)
+    set -l url "http://localhost:$port"
+    set -l attempts 0
+    while test $attempts -lt 20
+        if curl -sf $url >/dev/null 2>&1
+            break
+        end
+        sleep 0.5
+        set attempts (math $attempts + 1)
+    end
+    if test $attempts -ge 20
+        echo "⚠️  Prototype server did not start at $url" >&2
+        kill $srv_pid 2>/dev/null
+        return 1
+    end
+
+    echo $srv_pid
+end
+
+function __autoplan_prototype_server_stop --argument-names pid --description "Kill Vite server process tree (descendants then parent); best-effort"
+    if test -z "$pid"
+        return
+    end
+    # Collect descendants recursively
+    set -l pids_to_kill
+    set -l queue $pid
+    while test (count $queue) -gt 0
+        set -l current $queue[1]
+        set queue $queue[2..-1]
+        set -a pids_to_kill $current
+        for child in (pgrep -P $current 2>/dev/null)
+            set -a queue $child
+        end
+    end
+    # Kill in reverse order (leaves first) then parent
+    for p in $pids_to_kill[-1..1]
+        kill $p 2>/dev/null
+    end
 end

@@ -15,6 +15,7 @@ Use AskUserQuestion (up to 2 rounds, max 4 questions each).
 - Domain-specific conventions for implementation (imports, patterns, file locations)
 - Domain-specific verification checks (what to audit beyond "tests pass")
 - Does this plan have flows that can't (or shouldn't) be auto-tested? If yes, create a companion `.md` file with step-by-step instructions and set `manual_test: <path>` in frontmatter. The harness runs it after `test_cmd` passes and deletes the file on completion.
+- Is UI direction worth settling interactively before implementing? If yes, set `prototype: true` in frontmatter and populate the `## prototype` section of the prompts file with project-specific UI conventions (design tokens, existing components to match, color/spacing conventions, Figma link if available).
 - Any "never do" rules for fix steps (e.g. "never skip tests", "never weaken assertions")
 - How do you run a single failing test file? (e.g. `npx nx run myapp:playwright -- <file>` or `npm run test:ai -- --testPathPattern=<file>`)
 

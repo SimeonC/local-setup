@@ -18,6 +18,7 @@ env_files:                  # optional — YAML list of dotenv files loaded (via
   - .semaphore/deployEnvironments/.staging-qa.env
 next: ./<slug>-2.md         # optional — next plan in chain
 cwd: ./monolith-free-sizing  # optional — subdir relative to autoplan launch dir; harness cds into it for this plan's duration (git, tests, commit all run there). Default: `.` (run root).
+prototype: true             # optional boolean — if true, a prototype phase runs before implement (interactive Svelte sandbox for UI direction); omit or false to skip
 commit_msg: "✨ Add ..."     # required — single-line gitmoji commit message for this plan's change; used by harness for deterministic commit (no LLM)
 ---
 ```
@@ -29,6 +30,10 @@ commit_msg: "✨ Add ..."     # required — single-line gitmoji commit message 
 ### cwd: Per-Plan Working Directory
 
 `cwd:` is an optional path (relative to the directory where `autoplan` is invoked, or absolute) that the harness `cd`s into for the duration of this plan. All git operations, test commands, `verify_cmds`, and the commit run in that directory. When `cwd:` is set, `test_cmd` and `verify_cmds` should NOT include a `cd <subdir> &&` prefix — the harness handles the directory change. Branch is also read and checked out in that directory. Note: `env_files` paths are still resolved relative to the autoplan launch dir (run root), not `cwd:`.
+
+### prototype: UI Prototyping Gate
+
+`prototype: true` gates an interactive prototype phase that runs before `implement`. When set, the harness launches a hot-reloading Vite+Svelte+Tailwind sandbox at a local URL and opens an interactive Claude session to build throwaway `.svelte` prototypes. The agent records agreed UI decisions into a `## UI Decisions` section in the plan body before advancing to `implement`. Omit or set to `false` to skip this phase entirely (the default).
 
 ### branch: Branch Intent
 
@@ -83,6 +88,10 @@ Bad:
 Explicit list of known gaps NOT handled by this plan, each with reason or deferral pointer.
 - <gap> — ignored because <reason>
 - <gap> — deferred to ./<slug>-N.md
+
+### UI Decisions
+
+Auto-maintained by the prototype phase when `prototype: true` is set. Records the agreed UI direction: layout structure, component breakdown, states/variants, interaction notes. Written by the prototype agent after user confirmation; read by the implement phase. Do not write this section manually — let the prototype phase populate it.
 
 ## Example
 

@@ -14,6 +14,7 @@ For each plan, check all required frontmatter fields are present and non-empty:
 - `test_cmd` (or `manual_test`), `prompts` — flag any missing as errors.
 - `branch:` — optional; omitting = adopt-current with interactive chooser; `<current>` = adopt-current silently (no chooser). Flag any `create_branch:` key as deprecated and remove it.
 - `cwd:` — if set, verify the path exists relative to the run root. If `test_cmd` or `verify_cmds` contain a `cd <subdir> &&` prefix that matches `cwd:`, flag as redundant and remove.
+- `prototype:` — optional boolean; omitting or `false` = no prototype phase; `true` = interactive Vite+Svelte prototype phase runs before `implement`. Flag any non-boolean value as an error.
 
 ## Step 3: Chain Integrity
 
@@ -45,7 +46,7 @@ Check for:
 
 For each plan's referenced `prompts` file:
 - **One prompts file per plan** — each plan must point to its OWN dedicated prompts file. If two plans share a `prompts:` path, flag as a violation and split: copy the shared file to `<slug>-N-prompts.md` per plan, tailor each, update frontmatter.
-- Sections present should be a subset of: `## implement`, `## fix_test`, `## fix_verify`, `## fix_verify_cmd`, `## verify`, `## harden`. Missing sections are OK — the harness still runs the phase with only the system-prompt process rules.
+- Sections present should be a subset of: `## implement`, `## fix_test`, `## fix_verify`, `## fix_verify_cmd`, `## verify`, `## harden`, `## prototype`. Missing sections are OK — the harness still runs the phase with only the system-prompt process rules.
 - **Domain context only — flag any process-rule language.** Process rules are harness-owned and must NOT appear in any section. Flag and remove if found:
   - TDD step lists (red/green/commit ordering).
   - "Do NOT commit / push / stage / stash / reset / revert / ...".

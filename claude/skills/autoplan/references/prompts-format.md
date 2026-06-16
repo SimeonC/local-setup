@@ -29,6 +29,8 @@ If you find any of the above in a prompts file, remove it — the harness alread
 | `$VERIFY_CMD_LOG` | `./tmp/autoplan-verify-cmd-output.txt` |
 | `$BRANCH` | The git branch name from plan frontmatter |
 | `$TEST_CMD` | The test command from plan frontmatter |
+| `$PROTOTYPE_DIR` | Absolute path to the sandbox's `src/prototypes/` directory (prototype phase only) |
+| `$PROTOTYPE_URL` | Live dev server URL, e.g. `http://localhost:5199` (prototype phase only) |
 
 Inside a prompts file these variables are substituted into the per-plan section before it is interpolated into the user prompt. They are most useful for cross-referencing a log path in a domain note (e.g. "the playwright trace dir lives next to $TEST_LOG").
 
@@ -70,6 +72,10 @@ Domain context for the audit. The harness already supplies the audit-only stance
 ### `## harden`
 
 Domain context for the harden pass. Notes about per-area quality concerns (e.g. "this area uses optional chaining heavily — flag any `!.` non-null assertions"). Do **not** include shell commands or test-runner invocations — those belong in the plan's `verify_cmds:` frontmatter list.
+
+### `## prototype`
+
+Domain context for the prototype phase. Add notes specific to the project's UI direction: existing design tokens or CSS variables the prototype should use, existing components to match or reference, color palette or spacing conventions, any UI library already in use. If the project has a design system or Figma link, reference it here. This section is domain context only — process rules (server already running, write only to prototypes dir and plan file, record decisions) are harness-injected.
 
 For plans with flows that aren't auto-testable—UI walkthroughs, approval workflows, manual verification steps—create a companion `.md` file with instructions and set `manual_test: <path>` in the plan's frontmatter. The fix loops (`fix_test` and `fix_verify`) handle `MANUAL TEST FAILURE` markers the same way they handle automated test failures.
 
