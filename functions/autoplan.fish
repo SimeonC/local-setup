@@ -149,7 +149,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     mkdir -p $__autoplan_root/tmp
 
     set -l base_system_prompt (__autoplan_compose_system base)
-    set -l implement_system_prompt     (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity refactor-confirm implement)
+    set -l implement_system_prompt     (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity implement)
     set -l fix_test_system_prompt      (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity refactor-confirm fix-test)
     set -l fix_verify_system_prompt    (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity refactor-confirm fix-verify)
     set -l fix_verify_cmd_system_prompt (__autoplan_compose_system base stage-restrictions scope no-cmd test-integrity refactor-confirm fix-verify-cmd)
@@ -211,8 +211,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 return 1
             end
 
-            # Chooser: show fzf for every adopt-current plan (skip on resume)
-            if test -t 0; and not set -q DEVCONTAINER
+            # Chooser: only when branch is omitted (explicit `<current>` adopts silently); skip on resume
+            if test -z "$branch"; and test -t 0; and not set -q DEVCONTAINER
                 and not set -q skip_to_phase
                 and type -q fzf
                 set -l out (git -C $plan_cwd branch --format='%(refname:short)' \
@@ -238,7 +238,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         # 130 = Esc / abort
                         return 1
                 end
-            else if test -t 0; and not set -q DEVCONTAINER
+            else if test -z "$branch"; and test -t 0; and not set -q DEVCONTAINER
                 and not set -q skip_to_phase
                 and not type -q fzf
                 echo "note: fzf not installed — adopting current branch '$current_branch' in $plan_cwd (install with: brew install fzf)"
@@ -281,6 +281,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+        # Re-read pr_title per plan
+        set pr_title (__autoplan_frontmatter $current_plan pr_title)
+
         # ===== IMPLEMENT =====
         if not __autoplan_check_skip implement
             __autoplan_save_state $current_plan implement $pr_title
@@ -292,7 +295,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 implement-prompt.md DOMAIN_IMPLEMENT implement \
                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-            env -C $plan_cwd claude --permission-mode $permission_mode \
+            env -C $plan_cwd claude -p --permission-mode $permission_mode \
                 --append-system-prompt "$implement_system_prompt" "$impl_sub"
 
             echo "✅ Implement complete."
@@ -500,7 +503,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model sonnet "/plan $fix_vc_prompt"
+                    env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model opusplan "/plan $fix_vc_prompt"
                 end
             end
         end
@@ -571,6 +574,63 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             end
         end
 
+        # ===== CHAIN REVIEW + PR (terminal plan only) =====
+        # Only runs on the last plan in the chain (no `next:`). State is saved
+        # only when we actually enter this phase, so earlier plans never record a
+        # bogus chain_review_pr resume point.
+        if test -z "$next_plan"
+            __autoplan_save_state $current_plan chain_review_pr $pr_title
+        else if set -q skip_to_phase; and test "$skip_to_phase" = chain_review_pr
+            # Non-terminal plan resumed at a stale chain_review_pr point: clear the
+            # flag so the next plan starts cleanly at implement.
+            set -eg skip_to_phase
+        end
+        if test -z "$next_plan"; and not __autoplan_check_skip chain_review_pr
+            echo ""
+            echo "🔍🚀 Chain review + PR orchestrator..."
+
+            rm -f $__autoplan_root/tmp/autoplan-pr-body.txt
+
+            if test -n "$pr_title"
+                set -l pr_body_sub (__autoplan_interpolate_prompt \
+                    (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
+                    $current_plan $branch $snap_test_cmd)
+
+                set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
+                set -l team_name "autoplan-cr-$team_slug"
+                set -l cr_orch (cat "$HOME/.claude/skills/autoplan/references/chain-review-pr-orchestrator.md" \
+                    | string replace -a -- '$PLAN_FILE' "$current_plan" \
+                    | string replace -a -- '$BRANCH' "$branch" \
+                    | string replace -a -- '$PLAN_DIR' "$plan_dir" \
+                    | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
+                    | string replace -a -- '$TEAM_NAME' "$team_name")
+
+                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
+
+                git -C $plan_cwd push origin $branch
+
+                if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
+                    echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
+                else if gh pr view $branch >/dev/null 2>&1
+                    echo "PR already exists for $branch."
+                else
+                    gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
+                end
+            else
+                set -l review_only_prompt "Review the completed autoplan chain on branch \`$branch\`.
+
+## Review commits
+Run: git log --oneline origin/main..$branch
+Verify the commits look complete and nothing was obviously missed.
+
+## Summary
+Print a brief summary of what was completed and flag anything that looks incomplete."
+
+                env -C $plan_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$review_only_prompt"
+                echo "ℹ️  No pr_title — skipping PR creation."
+            end
+        end
+
         # Follow linked list
         if test -n "$next_plan"
             # Resolve next path relative to the completed plan's directory
@@ -588,77 +648,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             __autoplan_save_state $current_plan implement $pr_title
         else
             break
-        end
-    end
-
-    # ===== CHAIN REVIEW + PR (combined orchestrator) =====
-    __autoplan_save_state $current_plan chain_review_pr $pr_title
-    if not __autoplan_check_skip chain_review_pr
-        echo ""
-        echo "🔍🚀 Chain review + PR orchestrator..."
-
-        # Use snapshotted branch/cwd (plan file already deleted)
-        set -l branch $snap_branch
-        set -l final_cwd_raw $snap_cwd_raw
-        if test -z "$final_cwd_raw"
-            set final_cwd_raw .
-        end
-        set -l final_cwd
-        if string match -q '/*' $final_cwd_raw
-            set final_cwd $final_cwd_raw
-        else
-            set final_cwd $__autoplan_root/$final_cwd_raw
-        end
-        set final_cwd (realpath $final_cwd 2>/dev/null)
-        if test -d "$final_cwd"
-            __autoplan_activate_tools $final_cwd
-        end
-        # Adopt-current: if branch omitted or <current>, resolve from actual checkout
-        if test -z "$branch"; or test "$branch" = "<current>"
-            set branch (git -C $final_cwd branch --show-current 2>/dev/null)
-        end
-
-        set -l plan_dir (dirname $current_plan)
-        rm -f $__autoplan_root/tmp/autoplan-pr-body.txt
-
-        if test -n "$pr_title"
-            set -l pr_body_sub (__autoplan_interpolate_prompt \
-                (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
-                $current_plan $branch $snap_test_cmd)
-
-            set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
-            set -l team_name "autoplan-cr-$team_slug"
-            set -l cr_orch (cat "$HOME/.claude/skills/autoplan/references/chain-review-pr-orchestrator.md" \
-                | string replace -a -- '$PLAN_FILE' "$current_plan" \
-                | string replace -a -- '$BRANCH' "$branch" \
-                | string replace -a -- '$PLAN_DIR' "$plan_dir" \
-                | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
-                | string replace -a -- '$TEAM_NAME' "$team_name")
-
-            env -C $final_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$cr_orch"
-
-            git -C $final_cwd push origin $branch
-
-            if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
-                echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
-            else if gh pr view $branch >/dev/null 2>&1
-                echo "PR already exists for $branch."
-            else
-                gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
-            end
-        else
-            # No pr_title — run a git log summary in the final plan's repo (no PR, no cleanup needed)
-            set -l review_only_prompt "Review the completed autoplan chain on branch \`$branch\`.
-
-## Review commits
-Run: git log --oneline origin/main..$branch
-Verify the commits look complete and nothing was obviously missed.
-
-## Summary
-Print a brief summary of what was completed and flag anything that looks incomplete."
-
-            env -C $final_cwd claude --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model sonnet --effort medium "$review_only_prompt"
-            echo "ℹ️  No pr_title — skipping PR creation."
         end
     end
 
