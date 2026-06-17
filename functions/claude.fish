@@ -28,34 +28,18 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux new-session -d -s $sess_name -x (tput cols) -y (tput lines) \
             fish --private -c "source $tmpscript; rm $tmpscript"
         tmux set-option -wt $sess_name automatic-rename off
-        # remain-on-exit keeps the pane alive after the shell exits so the hook below can capture it
-        tmux set-option -wt $sess_name remain-on-exit on
         tmux rename-window -t $sess_name "$short_cwd"
         tmux set-option -g set-titles on 2>/dev/null
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
-        # pane-exited fires after shell exits while pane is still alive (remain-on-exit).
-        # Capture pane content (contains resume block), then kill session so attach-session returns.
-        tmux set-hook -t $sess_name pane-exited \
-            "run-shell 'tmux capture-pane -p -S -200 -t $sess_name > $captfile 2>/dev/null; tmux kill-session -t $sess_name 2>/dev/null'"
+        # Stream raw pane output to captfile before attaching; used to recover the resume command
+        tmux pipe-pane -t $sess_name "cat >> $captfile"
         tmux attach-session -t $sess_name
-        # Re-print claude's exit block (resume command etc.) which vanishes with the tmux pane
+        # Re-print resume command extracted from raw captured output
         if test -f $captfile -a -s $captfile
-            set -l final_block (awk '
-                /^[[:space:]]*$/ { buf = "" }
-                !/^[[:space:]]*$/ { buf = (buf == "" ? $0 : buf "\n" $0) }
-                END { printf "%s", buf }
-            ' $captfile | string collect)
-            if test -n "$final_block"
-                if not string match -qr -- '--resume' "$final_block"
-                    set -l resume_line (grep -o 'claude --resume [A-Za-z0-9_-]*' $captfile 2>/dev/null | tail -1)
-                    if test -n "$resume_line"
-                        echo ""
-                        echo "$resume_line"
-                    end
-                else
-                    echo ""
-                    echo "$final_block"
-                end
+            set -l resume_line (grep -ao 'claude --resume [a-fA-F0-9-]*' $captfile 2>/dev/null | tail -1)
+            if test -n "$resume_line"
+                echo ""
+                echo "$resume_line"
             end
             rm -f $captfile
         end
