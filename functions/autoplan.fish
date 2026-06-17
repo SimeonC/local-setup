@@ -7,16 +7,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     set -l max_fix_attempts (set -q _flag_max_fix_attempts; and echo $_flag_max_fix_attempts; or echo 3)
     set -l max_verify_passes (set -q _flag_max_verify_passes; and echo $_flag_max_verify_passes; or echo 3)
 
-    # Permission mode
-    set -l permission_mode acceptEdits
-    if set -q DEVCONTAINER
-        set permission_mode bypassPermissions
-    else
-        read -P "Allow Claude to skip permissions (dangerous mode)? [y/N] " -l _dangerous_mode
-        if string match -qi 'y*' $_dangerous_mode
-            set permission_mode bypassPermissions
-        end
-    end
+    set -l permission_mode bypassPermissions
 
     # ===== SETUP =====
     set -l current_plan ""

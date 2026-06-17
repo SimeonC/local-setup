@@ -20,17 +20,40 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         set -l sess_name "claude-$fish_pid"
         # Write args to a temp script — avoids string escaping issues
         set -l tmpscript /tmp/.claude_(date +%Y%m%d_%H%M%S)_$fish_pid.fish
+        set -l captfile /tmp/.claude_resume_(date +%Y%m%d_%H%M%S)_$fish_pid.txt
         echo "command claude" (string escape -- $claude_args) > $tmpscript
         # Pass command directly to new-session (not send-keys) so it's never typed
         # into an interactive shell and never recorded in history.
         # fish --private disables history for the session; tmux exits when claude exits.
+        # capture-pane runs after claude exits, before the pane is destroyed, preserving the resume block.
         tmux new-session -d -s $sess_name -x (tput cols) -y (tput lines) \
-            fish --private -c "source $tmpscript; rm $tmpscript"
+            fish --private -c "source $tmpscript; tmux capture-pane -p -J -S -200 > $captfile; rm $tmpscript"
         tmux set-option -wt $sess_name automatic-rename off
         tmux rename-window -t $sess_name "$short_cwd"
         tmux set-option -g set-titles on 2>/dev/null
         tmux set-option -g set-titles-string "tmux #W" 2>/dev/null
         tmux attach-session -t $sess_name
+        # Re-print claude's exit block (resume command etc.) which vanishes with the tmux pane
+        if test -f $captfile -a -s $captfile
+            set -l final_block (awk '
+                /^[[:space:]]*$/ { buf = "" }
+                !/^[[:space:]]*$/ { buf = (buf == "" ? $0 : buf "\n" $0) }
+                END { printf "%s", buf }
+            ' $captfile | string collect)
+            if test -n "$final_block"
+                if not string match -qr -- '--resume' "$final_block"
+                    set -l resume_line (grep -o 'claude --resume [A-Za-z0-9_-]*' $captfile 2>/dev/null | tail -1)
+                    if test -n "$resume_line"
+                        echo ""
+                        echo "$resume_line"
+                    end
+                else
+                    echo ""
+                    echo "$final_block"
+                end
+            end
+            rm -f $captfile
+        end
         # Clean up any entries Claude Code wrote directly to the history file
         for _entry in (builtin history search --prefix "command claude")
             builtin history delete --case-sensitive --exact -- $_entry
