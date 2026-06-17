@@ -323,9 +323,36 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 --permission-mode $permission_mode --model 'opus[1m]' \
                 --append-system-prompt "$implement_system_prompt" "$impl_sub" | format-claude-stream
             set -l _st $pipestatus[1]
-            if __autoplan_step_failed $_st; return 1; end
+            if test $_st -eq 130
+                echo "⚠️  Implement interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                return 1
+            end
 
-            echo "✅ Implement complete."
+            set -l _sentinel $__autoplan_root/tmp/autoplan-step-result.txt
+            if test -f $_sentinel && head -1 $_sentinel | string match -qr '^ALL_GOOD'
+                echo "✅ Implement complete."
+            else
+                # Non-ALL_GOOD report or missing sentinel — launch headed recovery session
+                if not test -f $_sentinel
+                    echo "INCOMPLETE (no notes — implement did not write a report)" > $_sentinel
+                    echo "⚠️  Implement did not write a completion report. Launching recovery session..." >&2
+                else
+                    echo "⚠️  Implement incomplete. Launching recovery session with report..." >&2
+                    cat $_sentinel >&2
+                end
+
+                set -l recover_sub (__autoplan_build_user_prompt \
+                    implement-recover-prompt.md DOMAIN_IMPLEMENT implement \
+                    "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
+
+                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan implement-recover) \
+                    --permission-mode $permission_mode --model opusplan \
+                    --append-system-prompt "$implement_system_prompt" "/plan $recover_sub"
+                set -l _rst $status
+                if __autoplan_step_interrupted $_rst; return 1; end
+
+                echo "✅ Implement recovery session complete."
+            end
         end
 
         # ===== TEST/FIX LOOP =====
