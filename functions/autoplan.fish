@@ -296,10 +296,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     prototype-prompt.md DOMAIN_PROTOTYPE prototype \
                     "$_pp" $current_plan $branch "$_tc" "$proto_dir" "$proto_url" | string collect --allow-empty)
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
-                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan prototype) \
+                __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan prototype) \
                     --permission-mode $permission_mode --model 'opus[1m]' \
                     --append-system-prompt "$prototype_system_prompt" "$proto_sub"
-                set -l _st $status
+                set -l _st $__autoplan_last_status
                 __autoplan_prototype_server_stop $srv_pid
                 if __autoplan_step_failed $_st; return 1; end
                 echo "✅ Prototype complete."
@@ -522,8 +522,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
-                    set -l _st $status
+                    __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
+                    set -l _st $__autoplan_last_status
                     if __autoplan_step_interrupted $_st; return 1; end
 
                     # Reset fix attempts and re-run test/fix loop
@@ -785,8 +785,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
                     | string replace -a -- '$TEAM_NAME' "$team_name")
 
-                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
-                set -l _cr_st $status
+                __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
+                set -l _cr_st $__autoplan_last_status
                 if test $_cr_st -eq 130
                     echo "⚠️  Chain review interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                     return 1
@@ -815,8 +815,8 @@ Print a brief summary of what was completed and flag anything that looks incompl
 When you have fully completed this task, write exactly \`ALL_GOOD\` (and nothing else) to \`$_step_log\`. If you stop early, are interrupted, or cannot complete it, do NOT write \`ALL_GOOD\` — write a one-line reason to \`$_step_log\` instead."
 
                 rm -f $_step_log
-                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan review-only) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$review_only_prompt"
-                set -l _st $status
+                __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan review-only) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$review_only_prompt"
+                set -l _st $__autoplan_last_status
                 if __autoplan_step_failed $_st; return 1; end
                 echo "ℹ️  No pr_title — skipping PR creation."
             end
@@ -1077,6 +1077,14 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     set -g __autoplan_last_status $pipestatus[1]
 end
 
+function __autoplan_claude_headed --description "Run claude headed via the tmux claude wrapper in a given dir; sets __autoplan_last_status"
+    set -l _ch_dir $argv[1]
+    pushd $_ch_dir
+    claude $argv[2..-1]
+    set -g __autoplan_last_status $status
+    popd
+end
+
 function __autoplan_resume_headed --description "Resume a session headed (no -p); sets __autoplan_last_status"
     # args: plan_cwd uuid perm_mode nudge_msg [use_plan_mode=false]
     set -l _rh_cwd $argv[1]
@@ -1086,8 +1094,7 @@ function __autoplan_resume_headed --description "Resume a session headed (no -p)
     if test (count $argv) -ge 5; and test "$argv[5]" = true
         set _rh_nudge "/plan $_rh_nudge"
     end
-    env -C $_rh_cwd claude --resume $_rh_uuid --permission-mode $_rh_perm "$_rh_nudge"
-    set -g __autoplan_last_status $status
+    __autoplan_claude_headed $_rh_cwd --resume $_rh_uuid --permission-mode $_rh_perm "$_rh_nudge"
 end
 
 function __autoplan_phase_index --argument-names phase
