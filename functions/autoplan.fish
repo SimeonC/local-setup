@@ -318,40 +318,35 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
             rm -f $__autoplan_root/tmp/autoplan-step-result.txt
-            env -C $plan_cwd claude -p --output-format stream-json --verbose \
-                --name (__autoplan_session_name $current_plan implement) \
-                --permission-mode $permission_mode --model 'opus[1m]' \
-                --append-system-prompt "$implement_system_prompt" "$impl_sub" | format-claude-stream
-            set -l _st $pipestatus[1]
-            if test $_st -eq 130
+            __autoplan_run_headless $plan_cwd \
+                (__autoplan_session_name $current_plan implement) \
+                $permission_mode 'opus[1m]' "$implement_system_prompt" "$impl_sub"
+            if test $__autoplan_last_status -eq 130
                 echo "⚠️  Implement interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                 return 1
             end
 
             set -l _sentinel $__autoplan_root/tmp/autoplan-step-result.txt
-            if test -f $_sentinel && head -1 $_sentinel | string match -qr '^ALL_GOOD'
+            if test -f $_sentinel; and head -1 $_sentinel | string match -qr '^ALL_GOOD'
                 echo "✅ Implement complete."
             else
-                # Non-ALL_GOOD report or missing sentinel — launch headed recovery session
-                if not test -f $_sentinel
-                    echo "INCOMPLETE (no notes — implement did not write a report)" > $_sentinel
-                    echo "⚠️  Implement did not write a completion report. Launching recovery session..." >&2
-                else
-                    echo "⚠️  Implement incomplete. Launching recovery session with report..." >&2
+                if test -f $_sentinel
                     cat $_sentinel >&2
                 end
-
-                set -l recover_sub (__autoplan_build_user_prompt \
-                    implement-recover-prompt.md DOMAIN_IMPLEMENT implement \
-                    "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
-
-                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan implement-recover) \
-                    --permission-mode $permission_mode --model opusplan \
-                    --append-system-prompt "$implement_system_prompt" "/plan $recover_sub"
-                set -l _rst $status
-                if __autoplan_step_interrupted $_rst; return 1; end
-
-                echo "✅ Implement recovery session complete."
+                echo "⚠️  Implement incomplete." >&2
+                if __autoplan_can_steer
+                    __autoplan_resume_headed $plan_cwd $__autoplan_last_uuid $permission_mode \
+                        "Implement is not done. Finish the implementation and write ALL_GOOD as the first line of $__autoplan_root/tmp/autoplan-step-result.txt when complete." \
+                        true
+                    if test $__autoplan_last_status -eq 130
+                        echo "⚠️  Implement steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                        return 1
+                    end
+                    echo "✅ Implement complete."
+                else
+                    echo "Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
+                end
             end
         end
 
@@ -359,6 +354,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         if not __autoplan_check_skip test_fix
             __autoplan_save_state $current_plan test_fix $pr_title
             set -l fix_attempt 0
+            set -l last_fix_uuid ""
 
             while true
                 echo ""
@@ -377,12 +373,19 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     return 1
                 else
                     set fix_attempt (math $fix_attempt + 1)
-                    if test $fix_attempt -ge $max_fix_attempts
+                    if test $fix_attempt -gt $max_fix_attempts
                         echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
                         echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
-                        read -P "Continue cycling fix attempts? [y/N] " -l _continue_fix
-                        if string match -qi 'y*' $_continue_fix
+                        if __autoplan_can_steer; and test -n "$last_fix_uuid"
+                            __autoplan_resume_headed $plan_cwd $last_fix_uuid $permission_mode \
+                                "Tests are still failing after $max_fix_attempts attempts. Fix the remaining issues. Test output: $__autoplan_root/tmp/autoplan-test-output.txt" \
+                                true
+                            if test $__autoplan_last_status -eq 130
+                                echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                                return 1
+                            end
                             set fix_attempt 0
+                            continue
                         else
                             return 1
                         end
@@ -396,9 +399,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-test) --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $fix_prompt"
-                    set -l _st $status
-                    if __autoplan_step_interrupted $_st; return 1; end
+                    __autoplan_run_headless $plan_cwd \
+                        (__autoplan_session_name $current_plan fix-test) \
+                        $permission_mode "" "$fix_test_system_prompt" "$fix_prompt"
+                    set last_fix_uuid $__autoplan_last_uuid
+                    if test $__autoplan_last_status -eq 130
+                        echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                        return 1
+                    end
                 end
             end
         end
@@ -407,14 +415,22 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         if not __autoplan_check_skip harden_verify
             __autoplan_save_state $current_plan harden_verify $pr_title
             set -l verify_pass 0
+            set -l last_verify_uuid ""
 
             while true
                 set verify_pass (math $verify_pass + 1)
                 if test $verify_pass -gt $max_verify_passes
                     echo "⚠️  Verify still finding issues after $max_verify_passes passes." >&2
-                    read -P "Continue cycling verify passes? [y/N] " -l _continue_verify
-                    if string match -qi 'y*' $_continue_verify
+                    if __autoplan_can_steer; and test -n "$last_verify_uuid"
+                        __autoplan_resume_headed $plan_cwd $last_verify_uuid $permission_mode \
+                            "Verify is still finding issues after $max_verify_passes passes. Resolve all outstanding issues and write ALL_GOOD as the first line of $__autoplan_root/tmp/autoplan-verify-result.txt." \
+                            false
+                        if test $__autoplan_last_status -eq 130
+                            echo "⚠️  Verify steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                            return 1
+                        end
                         set verify_pass 0
+                        continue
                     else
                         return 1
                     end
@@ -432,9 +448,33 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
-                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan harden) --permission-mode $permission_mode --append-system-prompt "$harden_system_prompt" "$harden_sub"
-                set -l _st $status
-                if __autoplan_step_failed $_st; return 1; end
+                __autoplan_run_headless $plan_cwd \
+                    (__autoplan_session_name $current_plan harden) \
+                    $permission_mode "" "$harden_system_prompt" "$harden_sub"
+                set -l _harden_uuid $__autoplan_last_uuid
+                if test $__autoplan_last_status -eq 130
+                    echo "⚠️  Harden interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
+                end
+                if not test -f $__autoplan_root/tmp/autoplan-step-result.txt; \
+                        or not head -1 $__autoplan_root/tmp/autoplan-step-result.txt | string match -qr '^ALL_GOOD'
+                    if test -f $__autoplan_root/tmp/autoplan-step-result.txt
+                        cat $__autoplan_root/tmp/autoplan-step-result.txt >&2
+                    end
+                    echo "⚠️  Harden incomplete." >&2
+                    if __autoplan_can_steer
+                        __autoplan_resume_headed $plan_cwd $_harden_uuid $permission_mode \
+                            "Harden is not done. Complete all harden tasks and write ALL_GOOD as the first line of $__autoplan_root/tmp/autoplan-step-result.txt when complete." \
+                            true
+                        if test $__autoplan_last_status -eq 130
+                            echo "⚠️  Harden steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                            return 1
+                        end
+                    else
+                        echo "Stopping without advancing state. Resume with: autoplan" >&2
+                        return 1
+                    end
+                end
 
                 echo ""
                 echo "🔎 Verify (audit-only, pass $verify_pass/$max_verify_passes)..."
@@ -445,16 +485,29 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     verify-prompt.md DOMAIN_VERIFY verify \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                env -C $plan_cwd claude --name (__autoplan_session_name $current_plan verify) --permission-mode $permission_mode --append-system-prompt "$verify_system_prompt" "$verify_sub"
-                set -l _verify_st $status
-                if test $_verify_st -eq 130
+                __autoplan_run_headless $plan_cwd \
+                    (__autoplan_session_name $current_plan verify) \
+                    $permission_mode "" "$verify_system_prompt" "$verify_sub"
+                set last_verify_uuid $__autoplan_last_uuid
+                if test $__autoplan_last_status -eq 130
                     echo "⚠️  Verify interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                     return 1
                 end
 
                 if not test -f $__autoplan_root/tmp/autoplan-verify-result.txt
                     echo "❌ Verify did not write sentinel file." >&2
-                    return 1
+                    if __autoplan_can_steer
+                        __autoplan_resume_headed $plan_cwd $last_verify_uuid $permission_mode \
+                            "Verify did not complete. Finish the audit and write ALL_GOOD or ISSUES_FOUND as the first line of $__autoplan_root/tmp/autoplan-verify-result.txt." \
+                            false
+                        if test $__autoplan_last_status -eq 130
+                            echo "⚠️  Verify steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                            return 1
+                        end
+                        continue
+                    else
+                        return 1
+                    end
                 end
 
                 if head -1 $__autoplan_root/tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
@@ -473,8 +526,9 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     set -l _st $status
                     if __autoplan_step_interrupted $_st; return 1; end
 
-                    # Reset fix attempts and go back through test/fix loop
+                    # Reset fix attempts and re-run test/fix loop
                     set fix_attempt 0
+                    set last_fix_uuid ""
                     while true
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
@@ -492,12 +546,19 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                             return 1
                         else
                             set fix_attempt (math $fix_attempt + 1)
-                            if test $fix_attempt -ge $max_fix_attempts
+                            if test $fix_attempt -gt $max_fix_attempts
                                 echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
                                 echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
-                                read -P "Continue cycling fix attempts? [y/N] " -l _continue_fix
-                                if string match -qi 'y*' $_continue_fix
+                                if __autoplan_can_steer; and test -n "$last_fix_uuid"
+                                    __autoplan_resume_headed $plan_cwd $last_fix_uuid $permission_mode \
+                                        "Tests are still failing after $max_fix_attempts attempts. Fix the remaining issues. Test output: $__autoplan_root/tmp/autoplan-test-output.txt" \
+                                        true
+                                    if test $__autoplan_last_status -eq 130
+                                        echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                                        return 1
+                                    end
                                     set fix_attempt 0
+                                    continue
                                 else
                                     return 1
                                 end
@@ -511,15 +572,31 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                                 fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                            env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-test) --permission-mode $permission_mode --append-system-prompt "$fix_test_system_prompt" "/plan $refix_prompt"
-                            set -l _st $status
-                            if __autoplan_step_interrupted $_st; return 1; end
+                            __autoplan_run_headless $plan_cwd \
+                                (__autoplan_session_name $current_plan fix-test) \
+                                $permission_mode "" "$fix_test_system_prompt" "$refix_prompt"
+                            set last_fix_uuid $__autoplan_last_uuid
+                            if test $__autoplan_last_status -eq 130
+                                echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                                return 1
+                            end
                         end
                     end
                     # Continue verify loop
                 else
                     echo "❌ Verify did not write a recognized sentinel." >&2
-                    return 1
+                    if __autoplan_can_steer
+                        __autoplan_resume_headed $plan_cwd $last_verify_uuid $permission_mode \
+                            "Verify did not write a recognized sentinel. Complete the audit and write ALL_GOOD or ISSUES_FOUND as the first line of $__autoplan_root/tmp/autoplan-verify-result.txt." \
+                            false
+                        if test $__autoplan_last_status -eq 130
+                            echo "⚠️  Verify steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                            return 1
+                        end
+                        continue
+                    else
+                        return 1
+                    end
                 end
             end
         end
@@ -533,6 +610,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
                 set -l vc_env_prefix (__autoplan_env_prefix $_ef | string collect --allow-empty)
                 set -l vc_attempt 0
+                set -l last_vc_uuid ""
                 while true
                     set -l vc_failed_cmd ""
                     set -l vc_failed_status 0
@@ -559,12 +637,19 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     end
 
                     set vc_attempt (math $vc_attempt + 1)
-                    if test $vc_attempt -ge $max_fix_attempts
+                    if test $vc_attempt -gt $max_fix_attempts
                         echo "⚠️  verify_cmd '$vc_failed_cmd' still failing after $max_fix_attempts fix attempts." >&2
                         echo "Log: $__autoplan_root/tmp/autoplan-verify-cmd-output.txt" >&2
-                        read -P "Continue cycling fix attempts? [y/N] " -l _continue_vc
-                        if string match -qi 'y*' $_continue_vc
+                        if __autoplan_can_steer; and test -n "$last_vc_uuid"
+                            __autoplan_resume_headed $plan_cwd $last_vc_uuid $permission_mode \
+                                "verify_cmd '$vc_failed_cmd' is still failing after $max_fix_attempts attempts. Fix it. See log: $__autoplan_root/tmp/autoplan-verify-cmd-output.txt" \
+                                true
+                            if test $__autoplan_last_status -eq 130
+                                echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                                return 1
+                            end
                             set vc_attempt 0
+                            continue
                         else
                             return 1
                         end
@@ -585,9 +670,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    env -C $plan_cwd claude --name (__autoplan_session_name $current_plan fix-verify-cmd) --permission-mode $permission_mode --append-system-prompt "$fix_verify_cmd_system_prompt" --model opusplan "/plan $fix_vc_prompt"
-                    set -l _st $status
-                    if __autoplan_step_interrupted $_st; return 1; end
+                    __autoplan_run_headless $plan_cwd \
+                        (__autoplan_session_name $current_plan fix-verify-cmd) \
+                        $permission_mode "" "$fix_verify_cmd_system_prompt" "$fix_vc_prompt"
+                    set last_vc_uuid $__autoplan_last_uuid
+                    if test $__autoplan_last_status -eq 130
+                        echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                        return 1
+                    end
                 end
             end
         end
@@ -958,6 +1048,46 @@ function __autoplan_session_name --argument-names plan_file phase --description 
     set -l slug (string replace -r '\.md$' '' -- (basename $plan_file))
     set slug (string replace -ra '[^A-Za-z0-9_-]' '-' -- $slug)
     echo "autoplan:$slug:$phase"
+end
+
+function __autoplan_can_steer --description "True when running in an interactive TTY outside devcontainer"
+    test -t 0; and not set -q DEVCONTAINER
+end
+
+function __autoplan_run_headless --description "Run headless step with pre-assigned session id; sets globals __autoplan_last_uuid/__autoplan_last_status"
+    # args: plan_cwd session_name perm_mode model system_prompt user_prompt
+    set -l _hl_cwd $argv[1]
+    set -l _hl_name $argv[2]
+    set -l _hl_perm $argv[3]
+    set -l _hl_model $argv[4]
+    set -l _hl_sys $argv[5]
+    set -l _hl_prompt $argv[6]
+    set -g __autoplan_last_uuid (uuidgen | string lower)
+    if test -n "$_hl_model"
+        env -C $_hl_cwd claude -p --output-format stream-json --verbose \
+            --session-id $__autoplan_last_uuid --name $_hl_name \
+            --permission-mode $_hl_perm --model $_hl_model \
+            --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
+    else
+        env -C $_hl_cwd claude -p --output-format stream-json --verbose \
+            --session-id $__autoplan_last_uuid --name $_hl_name \
+            --permission-mode $_hl_perm \
+            --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
+    end
+    set -g __autoplan_last_status $pipestatus[1]
+end
+
+function __autoplan_resume_headed --description "Resume a session headed (no -p); sets __autoplan_last_status"
+    # args: plan_cwd uuid perm_mode nudge_msg [use_plan_mode=false]
+    set -l _rh_cwd $argv[1]
+    set -l _rh_uuid $argv[2]
+    set -l _rh_perm $argv[3]
+    set -l _rh_nudge $argv[4]
+    if test (count $argv) -ge 5; and test "$argv[5]" = true
+        set _rh_nudge "/plan $_rh_nudge"
+    end
+    env -C $_rh_cwd claude --resume $_rh_uuid --permission-mode $_rh_perm "$_rh_nudge"
+    set -g __autoplan_last_status $status
 end
 
 function __autoplan_phase_index --argument-names phase
