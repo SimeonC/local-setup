@@ -25,7 +25,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set -l _parts (string split -m 1 '=' $_line)
                 switch $_parts[1]
                     case plan;      set current_plan $_parts[2]
-                    case phase;     set -g skip_to_phase $_parts[2]
+                    case phase;     set -g skip_to_phase $_parts[2]; set_color brblack; echo "  phase=$skip_to_phase"; set_color normal
                     case pr_title;  set pr_title $_parts[2]
                 end
             end
@@ -123,6 +123,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             if test "$_pp_real" = "$current_plan"
                 set -g skip_to_phase $_progress_phase
                 set pr_title $_progress_pr_title
+                set_color brblack; echo "  phase=$skip_to_phase"; set_color normal
             end
         end
     else
@@ -979,6 +980,7 @@ function __autoplan_save_state --argument-names plan phase pr_title
     echo "phase=$phase" >> $__autoplan_root/.autoplan-progress
     echo "pr_title=$pr_title" >> $__autoplan_root/.autoplan-progress
     set_color brblack
+    echo "  phase=$phase"
     echo "↩️  Resume from this phase ($phase) with: autoplan"
     set_color normal
 end
