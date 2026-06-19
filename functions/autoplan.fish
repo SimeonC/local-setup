@@ -482,8 +482,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 end
 
                 if not test -f $__autoplan_root/tmp/autoplan-verify-result.txt
-                    echo "⚠️  Verify left no sentinel; re-running verify." >&2
-                    continue
+                    echo "⚠️  Verify left no sentinel. Stopping. Resume with: autoplan" >&2
+                    return 1
                 end
 
                 if head -1 $__autoplan_root/tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
@@ -560,8 +560,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     end
                     # Continue verify loop
                 else
-                    echo "⚠️  Verify wrote an unrecognized sentinel; re-running verify." >&2
-                    continue
+                    echo "⚠️  Verify wrote an unrecognized sentinel. Stopping. Resume with: autoplan" >&2
+                    return 1
                 end
             end
         end
