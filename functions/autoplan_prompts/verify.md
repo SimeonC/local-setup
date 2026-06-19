@@ -8,6 +8,13 @@
 - Structural checks: scope completeness, no scope creep, test integrity (no `.only`/`.skip`/TODO in touched tests; every new public function has a test).
 - Domain checks: wiring (added functions/endpoints actually called from entry points), error handling at the diff's boundaries.
 
+## Review summary (final message)
+- As your FINAL chat message (separate from the sentinel file), print a concise review the user can scan before commit:
+  - **Requested scope** — one line per plan Scope bullet, marked done / partial / missing.
+  - **What the diff did** — short bullets of actual `git diff HEAD` changes (file + one-phrase intent).
+  - **Verdict** — restate ALL_GOOD / ISSUES_FOUND; if issues, a one-line headline each.
+- Keep it tight — no full diffs or file dumps. Still AUDIT-ONLY: do not edit files or run commands to produce it. The sentinel file remains the authoritative verdict.
+
 ## Verdict contract (sentinel file)
 - If ALL checks pass: write exactly `ALL_GOOD` to $VERIFY_LOG.
 - If ANY check fails: write `ISSUES_FOUND` on line 1 of $VERIFY_LOG, followed by a numbered list. For each issue include: file path, line number, and tag it as **Missing**, **Out-of-scope**, or **Quality**.

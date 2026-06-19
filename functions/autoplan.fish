@@ -415,25 +415,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         if not __autoplan_check_skip harden_verify
             __autoplan_save_state $current_plan harden_verify $pr_title
             set -l verify_pass 0
-            set -l last_verify_uuid ""
 
             while true
                 set verify_pass (math $verify_pass + 1)
                 if test $verify_pass -gt $max_verify_passes
-                    echo "⚠️  Verify still finding issues after $max_verify_passes passes." >&2
-                    if __autoplan_can_steer; and test -n "$last_verify_uuid"
-                        __autoplan_resume_headed $plan_cwd $last_verify_uuid $permission_mode \
-                            "Verify is still finding issues after $max_verify_passes passes. Resolve all outstanding issues and write ALL_GOOD as the first line of $__autoplan_root/tmp/autoplan-verify-result.txt." \
-                            false
-                        if test $__autoplan_last_status -eq 130
-                            echo "⚠️  Verify steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
-                            return 1
-                        end
-                        set verify_pass 0
-                        continue
-                    else
-                        return 1
-                    end
+                    echo "⚠️  Verify still finding issues after $max_verify_passes passes. Resume with: autoplan" >&2
+                    return 1
                 end
 
                 echo ""
@@ -485,29 +472,18 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     verify-prompt.md DOMAIN_VERIFY verify \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                __autoplan_run_headless $plan_cwd \
-                    (__autoplan_session_name $current_plan verify) \
-                    $permission_mode "" "$verify_system_prompt" "$verify_sub"
-                set last_verify_uuid $__autoplan_last_uuid
+                __autoplan_claude_headed $plan_cwd \
+                    --name (__autoplan_session_name $current_plan verify) \
+                    --permission-mode $permission_mode \
+                    --append-system-prompt "$verify_system_prompt" "$verify_sub"
                 if test $__autoplan_last_status -eq 130
                     echo "⚠️  Verify interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                     return 1
                 end
 
                 if not test -f $__autoplan_root/tmp/autoplan-verify-result.txt
-                    echo "❌ Verify did not write sentinel file." >&2
-                    if __autoplan_can_steer
-                        __autoplan_resume_headed $plan_cwd $last_verify_uuid $permission_mode \
-                            "Verify did not complete. Finish the audit and write ALL_GOOD or ISSUES_FOUND as the first line of $__autoplan_root/tmp/autoplan-verify-result.txt." \
-                            false
-                        if test $__autoplan_last_status -eq 130
-                            echo "⚠️  Verify steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
-                            return 1
-                        end
-                        continue
-                    else
-                        return 1
-                    end
+                    echo "⚠️  Verify left no sentinel; re-running verify." >&2
+                    continue
                 end
 
                 if head -1 $__autoplan_root/tmp/autoplan-verify-result.txt | string match -qr '^ALL_GOOD'
@@ -584,19 +560,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     end
                     # Continue verify loop
                 else
-                    echo "❌ Verify did not write a recognized sentinel." >&2
-                    if __autoplan_can_steer
-                        __autoplan_resume_headed $plan_cwd $last_verify_uuid $permission_mode \
-                            "Verify did not write a recognized sentinel. Complete the audit and write ALL_GOOD or ISSUES_FOUND as the first line of $__autoplan_root/tmp/autoplan-verify-result.txt." \
-                            false
-                        if test $__autoplan_last_status -eq 130
-                            echo "⚠️  Verify steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
-                            return 1
-                        end
-                        continue
-                    else
-                        return 1
-                    end
+                    echo "⚠️  Verify wrote an unrecognized sentinel; re-running verify." >&2
+                    continue
                 end
             end
         end
