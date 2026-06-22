@@ -3,7 +3,7 @@
 // @namespace   Local Scripts
 // @match       https://github.com/*
 // @grant       none
-// @version     1.4.18
+// @version     1.4.19
 // @author      -
 // @description 9/10/2025, 2:59:24 PM
 // ==/UserScript==
@@ -59,7 +59,10 @@ function branchNameToDeploymentHref(branchName) {
         .toLowerCase()
         .replace(/[^a-z0-9-]+/gi, "-")}`;
     if (window.location.href.includes("/manager-ember"))
-      return `https://manager.app.staging-qa.tablecheck.com/branches/${branchName.toLowerCase()}/index.html`;
+      return `https://manager.app.staging-qa.tablecheck.com/branches/${branchName
+        .split("/")[1]
+        .split("_")[0]
+        .toLowerCase()}/index.html`;
   } catch (e) {
     console.error("Arc Boost", e);
   }
@@ -67,11 +70,14 @@ function branchNameToDeploymentHref(branchName) {
 }
 
 function testKey(event, key) {
-  return `key${key}` === event.code.toLowerCase() || key === event.key.toLowerCase();
+  return (
+    `key${key}` === event.code.toLowerCase() || key === event.key.toLowerCase()
+  );
 }
 
 function testEvent(event) {
-  if (!event.ctrlKey || !event.altKey || !event.metaKey || !event.shiftKey) return false;
+  if (!event.ctrlKey || !event.altKey || !event.metaKey || !event.shiftKey)
+    return false;
   for (const [key, value] of keyCombinations) {
     if (testKey(event, key)) return value;
   }
@@ -211,11 +217,19 @@ function splitAndSeparateLast(string, separator) {
 function isReviewable(r) {
   const { filePath, isViewed } = r;
   if (isViewed) return false;
-  const { last: fileName, rest: directories } = splitAndSeparateLast(filePath, "/");
-  const { last: ext, rest: fileNameParts } = splitAndSeparateLast(fileName, ".");
+  const { last: fileName, rest: directories } = splitAndSeparateLast(
+    filePath,
+    "/",
+  );
+  const { last: ext, rest: fileNameParts } = splitAndSeparateLast(
+    fileName,
+    ".",
+  );
   if (
     ext !== "json" ||
-    !directories.some((folder) => ["i18n", "locale", "locales"].includes(folder))
+    !directories.some((folder) =>
+      ["i18n", "locale", "locales"].includes(folder),
+    )
   )
     return true;
   const isReviewable = ["en", "ja"].some(
@@ -257,7 +271,9 @@ function addButtonLinkToContainer({
   const options = getOptions(element);
   if (!options) return false;
   if (Array.isArray(options)) {
-    const newOptions = options.filter(({ id }) => !document.getElementById(compoundId + id));
+    const newOptions = options.filter(
+      ({ id }) => !document.getElementById(compoundId + id),
+    );
     newOptions.forEach(({ text, href, id }) => {
       add(buildButton({ id: compoundId + id, href, text }));
     });
@@ -285,7 +301,9 @@ function addHeaderButtons() {
     addButtonLink(containers, {
       id: "header-deployments-link",
       getOptions: (element) => {
-        const branchLink = Array.from(element.querySelectorAll(branchTagSelector)).at(-1);
+        const branchLink = Array.from(
+          element.querySelectorAll(branchTagSelector),
+        ).at(-1);
         if (!branchLink) return;
         const branchName = branchLink.getAttribute("href").split("/tree/")[1];
         if (!branchName) return;
@@ -300,13 +318,18 @@ function addHeaderButtons() {
     addButtonLink(containers, {
       id: "jira-issue-link",
       getOptions: () => {
-        const branchLink = document.querySelector(branchTagSelector)?.getAttribute("href");
+        const branchLink = document
+          .querySelector(branchTagSelector)
+          ?.getAttribute("href");
         const jiraLinks = Array.from(
-          document.querySelectorAll(`[href^="https://tablecheck.atlassian.net/browse/"]`),
+          document.querySelectorAll(
+            `[href^="https://tablecheck.atlassian.net/browse/"]`,
+          ),
         ).map((e) => {
           if (e.closest("code") || e.closest(".TimelineItem")) return false;
           const containingP = e.closest("p");
-          if (containingP && containingP.textContent.match(/example:/i)) return false;
+          if (containingP && containingP.textContent.match(/example:/i))
+            return false;
           return e.getAttribute("href");
         });
         const header = document.querySelector(
@@ -319,10 +342,16 @@ function addHeaderButtons() {
         });
         const allMatches = linkMatches
           .concat(
-            header ? Array.from(header.matchAll(globalJiraRegex)).map((m) => m.groups?.ticket) : [],
+            header
+              ? Array.from(header.matchAll(globalJiraRegex)).map(
+                  (m) => m.groups?.ticket,
+                )
+              : [],
           )
           .filter((i) => !!i);
-        const uniqueMatches = Array.from(new Set(allMatches.map((s) => s?.toUpperCase())).values());
+        const uniqueMatches = Array.from(
+          new Set(allMatches.map((s) => s?.toUpperCase())).values(),
+        );
         return uniqueMatches.map((l) => ({
           id: l,
           href: `https://tablecheck.atlassian.net/browse/${l}`,
@@ -334,7 +363,7 @@ function addHeaderButtons() {
 }
 
 document.addEventListener(`pointerdown`, (e) => {
-  const target = e.target?.closest('a');
+  const target = e.target?.closest("a");
   if (!target || target.getAttribute(`target`) === `_blank`) return;
   const href = target.getAttribute(`href`);
   if (!href || !/^https?:\/\//.test(href)) return;

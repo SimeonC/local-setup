@@ -71,6 +71,7 @@ alias grit_clean "grit apply --force cleanup; and prettier --log-level=error -w 
 alias record "replayio record"
 alias dclaude danger_claude
 alias ppclaude 'claude "/plan $(pbpaste)"'
+alias cclaude 'claude --continue'
 alias prclaude print_claude
 alias qclaude quick_claude
 

@@ -295,7 +295,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
                 set -l proto_sub (__autoplan_build_user_prompt \
                     prototype-prompt.md DOMAIN_PROTOTYPE prototype \
-                    "$_pp" $current_plan $branch "$_tc" "$proto_dir" "$proto_url" | string collect --allow-empty)
+                    "$_pp" $current_plan $branch "$_tc" \
+                    --proto-dir "$proto_dir" --proto-url "$proto_url" | string collect --allow-empty)
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan prototype) \
                     --permission-mode $permission_mode --model 'opus[1m]' \
@@ -864,22 +865,18 @@ function __autoplan_load_prompt --argument-names prompts_file stage --descriptio
 end
 
 function __autoplan_build_user_prompt --description "Build a phase user prompt: load reference template, substitute DOMAIN section + vars"
-    # Usage: __autoplan_build_user_prompt <ref-filename> <domain-var-name> <section> <prompts_path> <plan_file> <branch> <test_cmd> [proto_dir] [proto_url]
+    # Usage: __autoplan_build_user_prompt <ref> <domain-var> <section> <prompts> <plan_file> <branch> [test_cmd...] [--proto-dir DIR] [--proto-url URL]
+    argparse 'proto-dir=' 'proto-url=' -- $argv
     set -l ref_name $argv[1]
     set -l domain_var $argv[2]
     set -l section $argv[3]
     set -l prompts_path $argv[4]
     set -l plan_file $argv[5]
     set -l branch $argv[6]
-    set -l test_cmd $argv[7]
-    set -l proto_dir ""
-    set -l proto_url ""
-    if test (count $argv) -ge 8
-        set proto_dir $argv[8]
-    end
-    if test (count $argv) -ge 9
-        set proto_url $argv[9]
-    end
+    # argv[7..-1] are test_cmd lines (0, 1, or many — join safely)
+    set -l test_cmd (string join \n -- $argv[7..-1])
+    set -l proto_dir (test -n "$_flag_proto_dir"; and echo "$_flag_proto_dir"; or echo "")
+    set -l proto_url (test -n "$_flag_proto_url"; and echo "$_flag_proto_url"; or echo "")
 
     set -l domain_lines (__autoplan_load_prompt "$prompts_path" $section)
     set -l domain_text (string join \n -- $domain_lines | string collect)
@@ -1177,7 +1174,7 @@ function __autoplan_ensure_prototype_sandbox --description "Idempotent: create w
         echo "📦 Installing prototype sandbox dependencies..." >&2
         set -l mise_prefix (__autoplan_mise_prefix $sandbox)
         env -C $sandbox fish -c "$mise_prefix""pnpm install" >/dev/null
-        env -C $sandbox fish -c "$mise_prefix""pnpm approve-builds esbuild --config.location=project" >/dev/null
+        env -C $sandbox fish -c "$mise_prefix""pnpm approve-builds esbuild @tablecheck/tablekit-tailwind --config.location=project" >/dev/null
     end
 
     echo $sandbox
@@ -1215,7 +1212,7 @@ function __autoplan_prototype_server_start --argument-names sandbox port --descr
         sleep 0.5
         set attempts (math $attempts + 1)
     end
-    if test $attempts -ge 20
+    if test $attempts -ge 60
         echo "⚠️  Prototype server did not start at $url" >&2
         kill $srv_pid 2>/dev/null
         return 1

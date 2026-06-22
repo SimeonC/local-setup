@@ -24,7 +24,7 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 - **Teams only when** ≥3 independent, context-heavy workstreams benefit from parallelism + isolation (multi-repo refactors, parallel research + impl streams). If streams need tight back-and-forth, skip the team.
 - **Two separate params** on every `Agent` call:
   - `subagent_type` — the agent role. Valid: `general-purpose` (impl/edits), `Explore` (search/research), `Plan`, `claude`, `statusline-setup`. NEVER a model ID.
-  - `model` — cheapest fit: `"haiku"` (search, reads, scripts, simple edits, doc lookup) · `"default"` (code editing, refactoring, new code, non-trivial test analysis) · `"best"` (complex architecture, tricky multi-file refactors; rare).
+  - `model` — cheapest fit: `"haiku"` (search, reads, scripts, simple edits, doc lookup) · `"sonnet"` (code editing, refactoring, new code, non-trivial test analysis) · `"opus"` (complex architecture, tricky multi-file refactors; rare).
 
 ### Teammate Lifecycle (only if a team is started)
 
@@ -47,6 +47,6 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 ## Commits
 
-- Follow the repo's existing commit convention (check recent `git log` output).
-- If no convention exists, use gitmoji style (e.g. `🐛 Fix race condition in session cleanup`).
+- Prefer gitmoji style if possible (e.g. `🐛 Fix race condition in session cleanup`).
+- Check the repo's existing commit convention if it exists (prefer actual documentation over checking recent `git log` output - but only if log is consistent, if not consistent use gitmoji).
 - **Always delegate committing** via `Agent(subagent_type: "general-purpose", model: "haiku")`. Pass it the diff, recent log, and commit convention. The subagent stages all files and creates the commit.
