@@ -1176,7 +1176,8 @@ function __autoplan_ensure_prototype_sandbox --description "Idempotent: create w
     if not test -d $nm; or test $pkg_src -nt $nm
         echo "📦 Installing prototype sandbox dependencies..." >&2
         set -l mise_prefix (__autoplan_mise_prefix $sandbox)
-        env -C $sandbox fish -c "$mise_prefix""npm install" >/dev/null
+        env -C $sandbox fish -c "$mise_prefix""pnpm install" >/dev/null
+        env -C $sandbox fish -c "$mise_prefix""pnpm approve-builds esbuild --config.location=project" >/dev/null
     end
 
     echo $sandbox
@@ -1201,7 +1202,7 @@ function __autoplan_prototype_server_start --argument-names sandbox port --descr
     set -l mise_prefix (__autoplan_mise_prefix $sandbox)
 
     # Start server in background
-    env -C $sandbox fish -c "$mise_prefix""npm run dev -- --port $port --strictPort" >$log 2>&1 &
+    env -C $sandbox fish -c "$mise_prefix""pnpm run dev --port $port --strictPort" >$log 2>&1 &
     set -l srv_pid $last_pid
 
     # Poll until the server responds (up to 10s)
