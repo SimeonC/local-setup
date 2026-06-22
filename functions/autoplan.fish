@@ -1205,10 +1205,10 @@ function __autoplan_prototype_server_start --argument-names sandbox port --descr
     env -C $sandbox fish -c "$mise_prefix""pnpm run dev --port $port --strictPort" >$log 2>&1 &
     set -l srv_pid $last_pid
 
-    # Poll until the server responds (up to 10s)
+    # Poll until the server responds (up to 30s)
     set -l url "http://localhost:$port"
     set -l attempts 0
-    while test $attempts -lt 20
+    while test $attempts -lt 60
         if curl -sf $url >/dev/null 2>&1
             break
         end

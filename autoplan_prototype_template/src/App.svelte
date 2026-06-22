@@ -6,7 +6,7 @@
   }))
 
   let selected = $state(prototypes[0]?.name ?? null)
-  $derived: let current = prototypes.find(p => p.name === selected) ?? null
+  let current = $derived(prototypes.find(p => p.name === selected) ?? null)
 </script>
 
 <div class="flex h-screen">
