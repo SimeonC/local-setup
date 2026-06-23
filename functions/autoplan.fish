@@ -240,12 +240,16 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             set branch $current_branch
         else
             # Ensure-branch mode: branch: <name> is specified
+            set -l _fresh_start_phase false
+            if not set -q skip_to_phase; or test "$skip_to_phase" = prototype; or test "$skip_to_phase" = implement
+                set _fresh_start_phase true
+            end
             if git -C $plan_cwd show-ref --verify --quiet refs/heads/$branch
                 # Branch exists locally — checkout if not current
                 if test (git -C $plan_cwd branch --show-current) != $branch
                     git -C $plan_cwd checkout $branch
                 end
-            else if not set -q skip_to_phase
+            else if test "$_fresh_start_phase" = true
                 # New branch: guard dirty tree, then create from origin/main
                 if not git -C $plan_cwd diff --quiet HEAD
                     echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
@@ -699,10 +703,18 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo ""
             echo "💾 Commit..."
 
+            set -l _commit_log $__autoplan_root/tmp/autoplan-commit-output.txt
+
             if test -n "$commit_msg"
                 if test -n "$(git -C $plan_cwd status --porcelain)"
                     git -C $plan_cwd add -A
-                    git -C $plan_cwd commit -m "$commit_msg"
+                    git -C $plan_cwd commit -m "$commit_msg" 2>&1 | tee $_commit_log
+                    set -l _commit_st $pipestatus[1]
+                    if test $_commit_st -ne 0
+                        echo "⚠️  Commit failed (likely pre-commit hooks). Recovering..." >&2
+                        __autoplan_commit_recover $plan_cwd $current_plan $branch "$snap_test_cmd" "$commit_msg" $permission_mode "$base_system_prompt"
+                        or return 1
+                    end
                 else
                     echo "ℹ️  Nothing to commit."
                 end
@@ -715,77 +727,66 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 env -C $plan_cwd claude -p --output-format stream-json --verbose \
                     --name (__autoplan_session_name $current_plan commit) \
                     --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" \
-                    --model haiku --effort medium "$commit_prompt" | format-claude-stream
+                    --model haiku --effort medium "$commit_prompt" | format-claude-stream | tee $_commit_log
                 set -l _st $pipestatus[1]
-                if __autoplan_step_failed $_st; return 1; end
+                if test $_st -eq 130
+                    echo "⚠️  Step interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
+                end
+                if not test -f $__autoplan_root/tmp/autoplan-step-result.txt; \
+                    or not head -1 $__autoplan_root/tmp/autoplan-step-result.txt | string match -qr '^ALL_GOOD'
+                    echo "⚠️  Haiku commit step failed. Attempting headed recovery..." >&2
+                    __autoplan_commit_recover $plan_cwd $current_plan $branch "$snap_test_cmd" "" $permission_mode "$base_system_prompt"
+                    or return 1
+                end
             end
         end
 
-        # ===== CHAIN REVIEW + PR (terminal plan only) =====
-        # Only runs on the last plan in the chain (no `next:`). State is saved
-        # only when we actually enter this phase, so earlier plans never record a
-        # bogus chain_review_pr resume point.
-        if test -z "$next_plan"
+        # ===== CHAIN REVIEW + PR (pr_title plans only) =====
+        # Runs on any plan that has a pr_title (PR boundary). State is saved only
+        # when we actually enter this phase, so plans without pr_title never record
+        # a bogus chain_review_pr resume point.
+        if test -n "$pr_title"
             __autoplan_save_state $current_plan chain_review_pr $pr_title
-        else if set -q skip_to_phase; and test "$skip_to_phase" = chain_review_pr
-            # Non-terminal plan resumed at a stale chain_review_pr point: clear the
-            # flag so the next plan starts cleanly at implement.
+        else if test -z "$pr_title"; and set -q skip_to_phase; and test "$skip_to_phase" = chain_review_pr
+            # Plan without pr_title resumed at a stale chain_review_pr point: clear
+            # the flag so the plan starts cleanly at implement.
             set -eg skip_to_phase
         end
-        if test -z "$next_plan"; and not __autoplan_check_skip chain_review_pr
+        if test -n "$pr_title"; and not __autoplan_check_skip chain_review_pr
             echo ""
             echo "🔍🚀 Chain review + PR orchestrator..."
 
             rm -f $__autoplan_root/tmp/autoplan-pr-body.txt
 
-            if test -n "$pr_title"
-                set -l pr_body_sub (__autoplan_interpolate_prompt \
-                    (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
-                    $current_plan $branch $snap_test_cmd)
+            set -l pr_body_sub (__autoplan_interpolate_prompt \
+                (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
+                $current_plan $branch $snap_test_cmd)
 
-                set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
-                set -l team_name "autoplan-cr-$team_slug"
-                set -l cr_orch (cat "$HOME/.claude/skills/autoplan/references/chain-review-pr-orchestrator.md" \
-                    | string replace -a -- '$PLAN_FILE' "$current_plan" \
-                    | string replace -a -- '$BRANCH' "$branch" \
-                    | string replace -a -- '$PLAN_DIR' "$plan_dir" \
-                    | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
-                    | string replace -a -- '$TEAM_NAME' "$team_name")
+            set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
+            set -l team_name "autoplan-cr-$team_slug"
+            set -l cr_orch (cat "$HOME/.claude/skills/autoplan/references/chain-review-pr-orchestrator.md" \
+                | string replace -a -- '$PLAN_FILE' "$current_plan" \
+                | string replace -a -- '$BRANCH' "$branch" \
+                | string replace -a -- '$PLAN_DIR' "$plan_dir" \
+                | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
+                | string replace -a -- '$TEAM_NAME' "$team_name")
 
-                __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
-                set -l _cr_st $__autoplan_last_status
-                if test $_cr_st -eq 130
-                    echo "⚠️  Chain review interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
-                    return 1
-                end
+            __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
+            set -l _cr_st $__autoplan_last_status
+            if test $_cr_st -eq 130
+                echo "⚠️  Chain review interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                return 1
+            end
 
-                git -C $plan_cwd push origin $branch
+            git -C $plan_cwd push origin $branch
 
-                if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
-                    echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
-                else if gh pr view $branch >/dev/null 2>&1
-                    echo "PR already exists for $branch."
-                else
-                    gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
-                end
+            if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
+                echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
+            else if gh pr view $branch >/dev/null 2>&1
+                echo "PR already exists for $branch."
             else
-                set -l _step_log $__autoplan_root/tmp/autoplan-step-result.txt
-                set -l review_only_prompt "Review the completed autoplan chain on branch \`$branch\`.
-
-## Review commits
-Run: git log --oneline origin/main..$branch
-Verify the commits look complete and nothing was obviously missed.
-
-## Summary
-Print a brief summary of what was completed and flag anything that looks incomplete.
-
-When you have fully completed this task, write exactly \`ALL_GOOD\` (and nothing else) to \`$_step_log\`. If you stop early, are interrupted, or cannot complete it, do NOT write \`ALL_GOOD\` — write a one-line reason to \`$_step_log\` instead."
-
-                rm -f $_step_log
-                __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan review-only) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$review_only_prompt"
-                set -l _st $__autoplan_last_status
-                if __autoplan_step_failed $_st; return 1; end
-                echo "ℹ️  No pr_title — skipping PR creation."
+                gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
             end
         end
 
@@ -801,9 +802,17 @@ When you have fully completed this task, write exactly \`ALL_GOOD\` (and nothing
                 echo "❌ Next plan not found: $next_plan" >&2
                 return 1
             end
-            set current_plan $next_plan
-            # Update state so a no-arg autoplan resumes at the next plan's implement
-            __autoplan_save_state $current_plan implement $pr_title
+            if test -n "$pr_title"
+                # PR boundary: pause for review/merge, save state pointing at next plan
+                set current_plan $next_plan
+                __autoplan_save_state $current_plan implement ""
+                echo "⏸️  PR raised — review & merge, then run \`autoplan\` to continue"
+                return 0
+            else
+                # No PR boundary: fold forward into next plan
+                set current_plan $next_plan
+                __autoplan_save_state $current_plan implement $pr_title
+            end
         else
             break
         end
@@ -998,6 +1007,58 @@ function __autoplan_step_failed --argument-names exit_status --description "Chec
         return 0
     end
     return 1
+end
+
+function __autoplan_commit_recover --description "Headed recovery for a failed commit; returns 0 on success, 1 on failure/abort"
+    # args: plan_cwd plan_file branch test_cmd commit_msg perm_mode base_system_prompt
+    set -l _cr_cwd $argv[1]
+    set -l _cr_plan $argv[2]
+    set -l _cr_branch $argv[3]
+    set -l _cr_test_cmd $argv[4]
+    set -l _cr_commit_msg $argv[5]
+    set -l _cr_perm $argv[6]
+    set -l _cr_base $argv[7]
+
+    set -l _commit_log $__autoplan_root/tmp/autoplan-commit-output.txt
+
+    if not __autoplan_can_steer
+        echo "⚠️  Commit failed but cannot open headed session (non-TTY/devcontainer). Resume with: autoplan" >&2
+        return 1
+    end
+
+    set -l _raw (__autoplan_interpolate_prompt \
+        (cat "$HOME/.claude/skills/autoplan/references/commit-recover-prompt.md") \
+        $_cr_plan $_cr_branch $_cr_test_cmd)
+    set -l _prompt (printf '%s\n' $_raw \
+        | string replace -a -- '$COMMIT_LOG' "$_commit_log" \
+        | string replace -a -- '$COMMIT_MSG' "$_cr_commit_msg")
+
+    rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+    __autoplan_claude_headed $_cr_cwd \
+        --name (__autoplan_session_name $_cr_plan commit-recover) \
+        --permission-mode $_cr_perm \
+        --append-system-prompt "$_cr_base" \
+        --model 'opus[1m]' \
+        "$_prompt"
+
+    if test $__autoplan_last_status -eq 130
+        echo "⚠️  Recovery session interrupted. Stopping without advancing state. Resume with: autoplan" >&2
+        return 1
+    end
+
+    if not test -f $__autoplan_root/tmp/autoplan-step-result.txt
+        echo "⚠️  Recovery session did not write completion sentinel. Stopping without advancing state. Resume with: autoplan" >&2
+        return 1
+    end
+    if not head -1 $__autoplan_root/tmp/autoplan-step-result.txt | string match -qr '^ALL_GOOD'
+        echo "⚠️  Recovery session sentinel is not ALL_GOOD. Stopping without advancing state. Resume with: autoplan" >&2
+        return 1
+    end
+    if test -n "$(git -C $_cr_cwd status --porcelain)"
+        echo "⚠️  Recovery completed but working tree is not clean — changes not committed. Stopping without advancing state. Resume with: autoplan" >&2
+        return 1
+    end
+    return 0
 end
 
 function __autoplan_step_interrupted --argument-names exit_status --description "Abort only on Ctrl-C (130); used for plan-mode fix steps that can't write a sentinel. returns 0=abort 1=ok"
