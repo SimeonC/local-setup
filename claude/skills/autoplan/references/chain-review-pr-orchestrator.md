@@ -11,23 +11,16 @@ Call `TeamCreate(team_name: "$TEAM_NAME", description: "Autoplan chain-review + 
 
 ## Step 1: Spawn the chain-review teammate
 
-Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "chain-review"`, `subagent_type: "general-purpose"` to review commits and clean up leftover plan/prompts files. Pass this prompt verbatim:
+Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "chain-review"`, `subagent_type: "general-purpose"` to review commits. Pass this prompt verbatim:
 
 ```
-Review the completed autoplan chain on branch `$BRANCH` and clean up.
+Review the completed autoplan chain on branch `$BRANCH`.
 
 ## Step 1: Review commits
 Run: `git log --oneline origin/main..$BRANCH`
-Cross-check each commit against the plan chain on branch `$BRANCH` (commits + leftover files in $PLAN_DIR) to verify nothing was missed or left incomplete.
+Cross-check each commit against the PR intent and branch diff (`git diff origin/main..$BRANCH`) to verify nothing was missed or left incomplete.
 
-## Step 2: Clean up leftover files
-Delete any remaining autoplan plan/prompts `.md` files in `$PLAN_DIR` that were part of this chain.
-Do NOT delete files that aren't part of this autoplan chain.
-If there are files to delete, stage and commit them in a single commit with message:
-
-    🔥 Remove completed plan files
-
-## Step 3: Summary
+## Step 2: Summary
 Print a brief summary of what was completed and flag anything that looks incomplete.
 ```
 
