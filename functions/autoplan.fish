@@ -896,12 +896,15 @@ function __autoplan_pause_exit_window --description "Interruptible countdown win
         test "$__autoplan_int" = 1; and break
     end
     functions -e __autoplan_on_sigint
-    set_color normal
     if test "$__autoplan_int" = 1
+        set_color normal
         printf '\n'
         return 130
     end
-    printf '\r\033[K'
+    # Leave a persistent trace so it's clear the window elapsed (the live
+    # countdown erases itself; without this, scrollback looks like no pause ran).
+    printf '\r\033[K  ⏵  advancing…\n'
+    set_color normal
 end
 
 function __autoplan_manual_test_file --argument-names plan_file --description "Resolve manual_test frontmatter path relative to plan_file dir"
@@ -1135,6 +1138,10 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     set -l _hl_sys $argv[5]
     set -l _hl_prompt $argv[6]
     set -g __autoplan_last_uuid (uuidgen | string lower)
+    # Default to interrupted (130): if rapid Ctrl-C interrupts fish before the
+    # trailing assignment runs, the caller's 130 check still aborts cleanly
+    # instead of crashing on an empty value.
+    set -g __autoplan_last_status 130
     if test -n "$_hl_model"
         env -C $_hl_cwd claude -p --output-format stream-json --verbose \
             --session-id $__autoplan_last_uuid --name $_hl_name \
@@ -1151,6 +1158,9 @@ end
 
 function __autoplan_claude_headed --description "Run claude headed via the tmux claude wrapper in a given dir; sets __autoplan_last_status"
     set -l _ch_dir $argv[1]
+    # Default to interrupted (130) so rapid Ctrl-C that interrupts fish before
+    # the trailing assignment leaves a valid status for the caller's 130 check.
+    set -g __autoplan_last_status 130
     pushd $_ch_dir
     claude $argv[2..-1]
     set -g __autoplan_last_status $status
