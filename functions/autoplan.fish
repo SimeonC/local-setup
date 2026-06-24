@@ -883,17 +883,25 @@ function __autoplan_display_rel --argument-names base abs --description "Display
 end
 
 function __autoplan_pause_exit_window --description "Interruptible countdown window to Ctrl-C before advancing; returns 130 if interrupted"
+    # Trap SIGINT so Ctrl-C is consumed cleanly (a bare `sleep` would let the
+    # signal interrupt fish itself, skipping the caller's `; or return 1`).
+    set -g __autoplan_int 0
+    function __autoplan_on_sigint --on-signal INT
+        set -g __autoplan_int 1
+    end
     set_color brblack
     for i in 5 4 3 2 1
         printf '\r  ⏸  advancing in %ds — Ctrl-C to stop ' $i
-        if not sleep 1
-            printf '\n'
-            set_color normal
-            return 130
-        end
+        sleep 1
+        test "$__autoplan_int" = 1; and break
+    end
+    functions -e __autoplan_on_sigint
+    set_color normal
+    if test "$__autoplan_int" = 1
+        printf '\n'
+        return 130
     end
     printf '\r\033[K'
-    set_color normal
 end
 
 function __autoplan_manual_test_file --argument-names plan_file --description "Resolve manual_test frontmatter path relative to plan_file dir"
