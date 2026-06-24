@@ -49,13 +49,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             else if test $root_count -eq 1
                 set current_plan $roots[1]
             else if test -t 0; and not set -q DEVCONTAINER; and type -q fzf
+                set -l base $__autoplan_root
                 set -l fzf_items
                 for r in $roots
                     set -l desc (__autoplan_frontmatter $r description)
                     if test -n "$desc"
-                        set -a fzf_items "$r  — $desc"
+                        set -a fzf_items "$(__autoplan_display_rel $base $r)  — $desc"
                     else
-                        set -a fzf_items $r
+                        set -a fzf_items (__autoplan_display_rel $base $r)
                     end
                 end
                 set -l chosen_line (printf '%s\n' $fzf_items \
@@ -64,11 +65,16 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 if test $status -ne 0; or test -z "$chosen_line"
                     return 1
                 end
-                set current_plan (string split -m 1 '  — ' $chosen_line)[1]
+                set -l picked (string split -m 1 '  — ' $chosen_line)[1]
+                if string match -q '/*' $picked
+                    set current_plan $picked
+                else
+                    set current_plan (realpath $base/$picked)
+                end
             else
                 echo "Error: Multiple plans found — pass a directory to filter or select interactively:" >&2
                 for r in $roots
-                    echo "  $r" >&2
+                    echo "  "(__autoplan_display_rel $__autoplan_root $r) >&2
                 end
                 return 1
             end
@@ -83,13 +89,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         else if test $root_count -eq 1
             set current_plan $roots[1]
         else if test -t 0; and not set -q DEVCONTAINER; and type -q fzf
+            set -l base (realpath $argv[1])
             set -l fzf_items
             for r in $roots
                 set -l desc (__autoplan_frontmatter $r description)
                 if test -n "$desc"
-                    set -a fzf_items "$r  — $desc"
+                    set -a fzf_items "$(__autoplan_display_rel $base $r)  — $desc"
                 else
-                    set -a fzf_items $r
+                    set -a fzf_items (__autoplan_display_rel $base $r)
                 end
             end
             set -l chosen_line (printf '%s\n' $fzf_items \
@@ -98,11 +105,16 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             if test $status -ne 0; or test -z "$chosen_line"
                 return 1
             end
-            set current_plan (string split -m 1 '  — ' $chosen_line)[1]
+            set -l picked (string split -m 1 '  — ' $chosen_line)[1]
+            if string match -q '/*' $picked
+                set current_plan $picked
+            else
+                set current_plan (realpath $base/$picked)
+            end
         else
             echo "Error: Multiple chain roots found in $argv[1] — cannot auto-select:" >&2
             for r in $roots
-                echo "  $r" >&2
+                echo "  "(__autoplan_display_rel (realpath $argv[1]) $r) >&2
             end
             return 1
         end
@@ -284,6 +296,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         # ===== PROTOTYPE (interactive, opt-in) =====
         if test "$(__autoplan_frontmatter $current_plan prototype)" = true
             if not __autoplan_check_skip prototype
+                __autoplan_pause_exit_window; or return 1
                 __autoplan_save_state $current_plan prototype $pr_title
                 echo "🎨 Prototype (interactive)..."
                 set -l sandbox (__autoplan_ensure_prototype_sandbox)
@@ -314,6 +327,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # ===== IMPLEMENT =====
         if not __autoplan_check_skip implement
+            __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan implement $pr_title
             echo "🛠️  Implement..."
 
@@ -358,6 +372,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # ===== TEST/FIX LOOP =====
         if not __autoplan_check_skip test_fix
+            __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan test_fix $pr_title
             set -l fix_attempt 0
             set -l last_fix_uuid ""
@@ -419,6 +434,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # ===== HARDEN + VERIFY (separate invocations with fix loop) =====
         if not __autoplan_check_skip harden_verify
+            __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan harden_verify $pr_title
             set -l verify_pass 0
 
@@ -574,6 +590,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # ===== VERIFY_CMDS (deterministic harness-driven checks) =====
         if not __autoplan_check_skip verify_cmds
+            __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan verify_cmds $pr_title
 
             set -l verify_cmds (__autoplan_frontmatter_list $current_plan verify_cmds)
@@ -699,6 +716,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # ===== COMMIT =====
         if not __autoplan_check_skip commit
+            __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan commit $pr_title
             echo ""
             echo "💾 Commit..."
@@ -747,6 +765,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         # when we actually enter this phase, so plans without pr_title never record
         # a bogus chain_review_pr resume point.
         if test -n "$pr_title"
+            __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan chain_review_pr $pr_title
         else if test -z "$pr_title"; and set -q skip_to_phase; and test "$skip_to_phase" = chain_review_pr
             # Plan without pr_title resumed at a stale chain_review_pr point: clear
@@ -805,12 +824,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             if test -n "$pr_title"
                 # PR boundary: pause for review/merge, save state pointing at next plan
                 set current_plan $next_plan
+                __autoplan_pause_exit_window; or return 1
                 __autoplan_save_state $current_plan implement ""
                 echo "⏸️  PR raised — review & merge, then run \`autoplan\` to continue"
                 return 0
             else
                 # No PR boundary: fold forward into next plan
                 set current_plan $next_plan
+                __autoplan_pause_exit_window; or return 1
                 __autoplan_save_state $current_plan implement $pr_title
             end
         else
@@ -855,6 +876,24 @@ function __autoplan_resolve_rel --argument-names plan_file raw --description "Re
     else
         echo (dirname $plan_file)/$raw
     end
+end
+
+function __autoplan_display_rel --argument-names base abs --description "Display abs relative to base dir; abs passes through if outside base"
+    string replace -- "$base/" "" $abs
+end
+
+function __autoplan_pause_exit_window --description "Interruptible countdown window to Ctrl-C before advancing; returns 130 if interrupted"
+    set_color brblack
+    for i in 5 4 3 2 1
+        printf '\r  ⏸  advancing in %ds — Ctrl-C to stop ' $i
+        if not sleep 1
+            printf '\n'
+            set_color normal
+            return 130
+        end
+    end
+    printf '\r\033[K'
+    set_color normal
 end
 
 function __autoplan_manual_test_file --argument-names plan_file --description "Resolve manual_test frontmatter path relative to plan_file dir"
