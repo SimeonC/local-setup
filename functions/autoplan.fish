@@ -681,6 +681,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             set -l canonical_prompts (realpath $prompts_path)
             for f in $plan_dir/*.md
                 test (realpath $f) = (realpath $current_plan); and continue
+                string match -q '*-prompts.md' $f; and continue
+                string match -q '*.manual.md' $f; and continue
                 set -l other_prompts (__autoplan_frontmatter $f prompts)
                 test -z "$other_prompts"; and continue
                 if not string match -q '/*' $other_prompts
@@ -893,7 +895,11 @@ function __autoplan_pause_exit_window --description "Interruptible countdown win
     for i in 5 4 3 2 1
         printf '\r  ⏸  advancing in %ds — Ctrl-C to stop ' $i
         sleep 1
-        test "$__autoplan_int" = 1; and break
+        set -l slept $status
+        if test "$__autoplan_int" = 1; or test $slept -ne 0
+            set __autoplan_int 1
+            break
+        end
     end
     functions -e __autoplan_on_sigint
     if test "$__autoplan_int" = 1
