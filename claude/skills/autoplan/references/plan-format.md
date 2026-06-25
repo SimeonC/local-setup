@@ -8,7 +8,7 @@ description: "2-3 sentence summary of what this plan does and why."  # required 
 branch: feat/...           # optional — git branch intent: present = ensure/create this branch; omit = adopt current checkout (interactive per-cwd chooser); `<current>` = adopt silently (no chooser)
 test_cmd: npm run test:ai   # required — command(s) to run tests
 manual_test: ./plan-name.manual.md  # optional — path to manual test instructions file
-pr_title: "..."             # optional — PR title string; omit to skip PR creation (commits only)
+pr_title: "..."             # optional — PR boundary marker: present = raise PR then autoplan stops for review/merge; omit = no PR, fold into next plan (commits only)
 prompts: ./<slug>-N-prompts.md # required — path to THIS plan's dedicated prompts file (one prompts file per plan, never shared)
 verify_cmds:                # optional — YAML list of deterministic shell commands run by the harness between harden_verify and commit
   - npm run lint:fix

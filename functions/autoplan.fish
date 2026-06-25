@@ -1125,10 +1125,10 @@ function __autoplan_step_interrupted --argument-names exit_status --description 
     return 1
 end
 
-function __autoplan_session_name --argument-names plan_file phase --description "Build a claude --name label: autoplan:<plan-slug>:<phase>"
+function __autoplan_session_name --argument-names plan_file phase --description "Build a claude --name label: <plan-slug> [<phase>]"
     set -l slug (string replace -r '\.md$' '' -- (basename $plan_file))
     set slug (string replace -ra '[^A-Za-z0-9_-]' '-' -- $slug)
-    echo "autoplan:$slug:$phase"
+    echo "$slug [$phase]"
 end
 
 function __autoplan_can_steer --description "True when running in an interactive TTY outside devcontainer"
