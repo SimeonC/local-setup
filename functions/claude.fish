@@ -36,7 +36,7 @@ function claude --wraps=claude --description 'Claude Code with tmux session mana
         tmux attach-session -t $sess_name
         # Re-print resume command extracted from raw captured output
         if test -f $captfile -a -s $captfile
-            set -l resume_line (grep -ao 'claude --resume [a-fA-F0-9-]*' $captfile 2>/dev/null | tail -1)
+            set -l resume_line (grep -aoE 'claude [^[:cntrl:]]+' $captfile 2>/dev/null | tail -1 | string trim)
             if test -n "$resume_line"
                 echo ""
                 echo "$resume_line"

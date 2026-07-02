@@ -1156,7 +1156,7 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     else
         env -C $_hl_cwd claude -p --output-format stream-json --verbose \
             --session-id $__autoplan_last_uuid --name $_hl_name \
-            --permission-mode $_hl_perm \
+            --permission-mode $_hl_perm --model "sonnet" \
             --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
     end
     set -g __autoplan_last_status $pipestatus[1]
