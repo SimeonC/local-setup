@@ -39,7 +39,7 @@ Use `dco --local` to prefer the workspace's `.devcontainer/devcontainer.json` ov
 
 ## Worktree port ranges
 
-If using `/worktree-setup`, port blocks start at 4000 in increments of 100 (10 ports per repo per block). Check the root `CLAUDE.md` for existing assignments before picking a range.
+For worktrees, port blocks start at 4000 in increments of 100 (10 ports per repo per block). Check the root `CLAUDE.md` for existing assignments before picking a range.
 
 ## Gitignore
 
