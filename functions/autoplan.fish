@@ -1156,7 +1156,7 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     else
         env -C $_hl_cwd claude -p --output-format stream-json --verbose \
             --session-id $__autoplan_last_uuid --name $_hl_name \
-            --permission-mode $_hl_perm --model "sonnet" \
+            --permission-mode $_hl_perm --model "claude-sonnet-4-6" \
             --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
     end
     set -g __autoplan_last_status $pipestatus[1]
@@ -1168,7 +1168,11 @@ function __autoplan_claude_headed --description "Run claude headed via the tmux 
     # the trailing assignment leaves a valid status for the caller's 130 check.
     set -g __autoplan_last_status 130
     pushd $_ch_dir
-    claude $argv[2..-1]
+    set -l _ch_args $argv[2..-1]
+    if not contains -- --model $_ch_args
+        set _ch_args --model claude-sonnet-4-6 $_ch_args
+    end
+    claude $_ch_args
     set -g __autoplan_last_status $status
     popd
 end
