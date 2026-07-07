@@ -2,6 +2,12 @@
 
 This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not directly in `~/.claude/`.
 
+## Uncertainty & Decisions (CRITICAL)
+
+- **No silent "rethinking."** Do NOT quietly reverse a decision, switch approaches, or abandon a plan step mid-task because of second thoughts. If you start doubting a chosen direction, STOP and surface it.
+- **Surface ALL uncertainty to me.** Whenever you're unsure — ambiguous requirements, multiple viable approaches, a risk you spotted, an assumption you'd otherwise silently make — raise it explicitly rather than picking for me. Use the AskUserQuestion tool when a decision is genuinely mine to make.
+- Do not paper over doubt with a confident-sounding guess. State what you know, what you don't, and what you'd do — then let me decide when it matters.
+
 ## Plan Mode
 
 - Make the plan extremely concise. Sacrifice grammar for the sake of concision.
