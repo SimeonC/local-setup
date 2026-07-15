@@ -1,6 +1,6 @@
 ---
 name: swarm
-description: Context-window delegation strategy for opus/opus-1m leads. Pushes raw reading/searching/self-contained implementation to cheap sub-agents so the lead never accumulates raw tokens — only conclusions. Use when planning any task, when codebase exploration is needed, when delegating sub-agents or teams, when controlling context window, when choosing model tiers, or when managing multi-stream work. DEFAULT when planning any task (alongside tdd for code tasks).
+description: Context-window delegation strategy for opus/opus-1m leads. Pushes raw reading/searching/self-contained implementation to cheap sub-agents so the lead never accumulates raw tokens — only conclusions. Use when planning any task, when implementing a plan, when codebase exploration is needed, when delegating sub-agents or teams, when controlling context window, when choosing model tiers, or when managing multi-stream work. DEFAULT both when planning any task AND when implementing a plan (alongside tdd for code tasks).
 user_invocable: true
 user_invocable_name: /swarm
 ---
@@ -18,7 +18,7 @@ Lead never holds: raw file dumps, grep output, broad search results.
 
 ## When to invoke
 
-- Always when planning (this is a DEFAULT behavior alongside `/tdd` for code tasks)
+- Always when planning a task AND when implementing a plan (this is a DEFAULT behavior alongside `/tdd` for code tasks)
 - Any task requiring codebase exploration, multi-file reads, or research
 - Any self-contained implementation work
 - Any time ≥3 independent context-heavy streams exist

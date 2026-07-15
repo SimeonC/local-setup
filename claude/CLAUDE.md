@@ -14,7 +14,6 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
 - Use the AskUserQuestion tool to resolve unresolved questions before finalizing the plan.
 - Tests, linters, typecheckers, and build commands are non-destructive — run them in plan mode to verify errors without asking. Caveat: if a project's test/build command mutates shared state (e.g. shared dev DB, external API writes), treat it as destructive.
-- **Always invoke the `swarm` skill when planning any task; also invoke `tdd` when the plan involves code changes.**
 
 ## Command Output
 
@@ -25,7 +24,8 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 ## Agent Delegation
 
-See the `swarm` skill for all sub-agent/team/model-tier/context rules.
+- **Always invoke the `swarm` skill both when planning a task AND when implementing a plan; also invoke `tdd` when the work involves code changes.**
+- See the `swarm` skill for all sub-agent/team/model-tier/context rules.
 
 ## Code Quality
 
