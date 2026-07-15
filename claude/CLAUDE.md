@@ -14,6 +14,7 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 - At the end of each plan, give me a list of unresolved questions to answer, if any.
 - Use the AskUserQuestion tool to resolve unresolved questions before finalizing the plan.
 - Tests, linters, typecheckers, and build commands are non-destructive — run them in plan mode to verify errors without asking. Caveat: if a project's test/build command mutates shared state (e.g. shared dev DB, external API writes), treat it as destructive.
+- **Always invoke the `swarm` skill when planning any task; also invoke `tdd` when the plan involves code changes.**
 
 ## Command Output
 
@@ -24,20 +25,7 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 ## Agent Delegation
 
-- **Always use Explore subagents for codebase exploration / research / search.** Don't grep or read widely as the lead — delegate.
-- **Self-contained implementation work** can be delegated to an `Agent` (or a team for multi-stream work). A "self-contained" task has clear inputs, scoped file set, and a single deliverable.
-- **Single-task orientation — CRITICAL.** Each agent/team gets ONE task with explicit scope. An implementation agent implements; it does NOT also run the full test suite, lint the repo, or touch unrelated areas. Verification, broad testing, and cross-cutting checks are separate tasks (separate agents, or done by the lead).
-- **Teams only when** ≥3 independent, context-heavy workstreams benefit from parallelism + isolation (multi-repo refactors, parallel research + impl streams). If streams need tight back-and-forth, skip the team.
-- **Two separate params** on every `Agent` call:
-  - `subagent_type` — the agent role. Valid: `general-purpose` (impl/edits), `Explore` (search/research), `Plan`, `claude`, `statusline-setup`. NEVER a model ID.
-  - `model` — cheapest fit: `"haiku"` (search, reads, scripts, simple edits, doc lookup) · `"sonnet"` (code editing, refactoring, new code, non-trivial test analysis) · `"opus"` (complex architecture, tricky multi-file refactors; rare).
-
-### Teammate Lifecycle (only if a team is started)
-
-- Dismiss on task completion via `SendMessage(to: "name", message: {type: "shutdown_request", reason: "..."})`. Friendly "you're done" does NOT terminate tmux.
-- Loop: monitor → review → `TaskUpdate(status:"completed")` → dismiss → spawn next queued (cap 3–4) → repeat.
-- Never batch dismissals.
-- Before ending conversation: shutdown remaining, verify via `TaskList`, then `TeamDelete`.
+See the `swarm` skill for all sub-agent/team/model-tier/context rules.
 
 ## Code Quality
 
