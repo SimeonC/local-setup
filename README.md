@@ -87,7 +87,7 @@ After installing Talon main, checkout these repositories and configure;
 
 ### Run setup script
 
-Creates symlinks for Claude Code config (`CLAUDE.md`, `skills/`) and grit patterns.
+Creates symlinks for Claude Code config (`CLAUDE.md`, `skills/`, `hooks/*`) and grit patterns.
 
 ```sh
 ./setup.sh
