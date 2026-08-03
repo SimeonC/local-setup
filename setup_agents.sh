@@ -44,9 +44,30 @@ for template in "$TEMPLATE_DIR"/*.md; do
   sed "s|__DEFAULT_MODEL__|$MODEL|g" "$template" > "$DEST_DIR/$name"
 done
 
+# Shadow selected built-in roles so they honour a pinned model instead of
+# inheriting the session default. Built-ins cannot be partially overridden — a
+# user agent of the same name fully replaces the built-in (no field merge) — so
+# each shadow reuses an existing template body verbatim with only `name:`
+# swapped. This sources the original template rather than hardcoding a second
+# copy; the source template's own model line is preserved.
+#   Explore <- explorer   general-purpose <- worker
+# (Plan is a first-class template that already carries name: Plan, so the main
+# loop above generates it directly — it overrides the built-in Plan role.)
+shadow_from() {
+  shadow="$1"; src="$2"
+  if [ ! -f "$TEMPLATE_DIR/$src.md" ]; then
+    echo "error: shadow source $src.md missing" >&2
+    exit 1
+  fi
+  sed -e "s|__DEFAULT_MODEL__|$MODEL|g" -e "s|^name: .*|name: $shadow|" \
+    "$TEMPLATE_DIR/$src.md" > "$DEST_DIR/$shadow.md"
+}
+shadow_from Explore explorer
+shadow_from general-purpose worker
+
 echo "Agents generated in $DEST_DIR (default tier: $MODEL):"
-for template in "$TEMPLATE_DIR"/*.md; do
-  name="$(basename "$template" .md)"
-  echo "  $name -> $(sed -n 's/^model: //p' "$DEST_DIR/$name.md")"
+for f in "$DEST_DIR"/*.md; do
+  name="$(basename "$f" .md)"
+  echo "  $name -> $(sed -n 's/^model: //p' "$f")"
 done
 echo "Note: the agent registry loads at session start — restart Claude Code to pick these up."
