@@ -28,7 +28,7 @@ If you find any of the above in a prompts file, remove it — the harness alread
 | `$VERIFY_LOG` | `./tmp/autoplan-verify-result.txt` |
 | `$VERIFY_CMD_LOG` | `./tmp/autoplan-verify-cmd-output.txt` |
 | `$BRANCH` | The git branch name from plan frontmatter |
-| `$TEST_CMD` | The test command from plan frontmatter |
+| `$TEST_CMD` | The `test_cmds` value(s) from plan frontmatter (joined newline-separated) |
 | `$PROTOTYPE_DIR` | Absolute path to the sandbox's `src/prototypes/` directory (prototype phase only) |
 | `$PROTOTYPE_URL` | Live dev server URL, e.g. `http://localhost:5199` (prototype phase only) |
 
@@ -50,7 +50,7 @@ Domain context for the implement phase. The harness already invokes TDD via the 
 
 ### `## fix_test`
 
-Domain context for fixing failing tests. **Include the single-failing-file run command for this project area** — that is the most useful per-domain note.
+Domain context for fixing failing tests. **Include the single-failing-file run command for this project area** — that is the most useful per-domain note. The agent reads `$TEST_LOG`, which is aggregated by the harness under `# Auto Tests` and `# Manual Test Output` section markers; reference `$TEST_LOG` if domain notes need to call out its structure. Note: `test_cmds` run **without** `CI=true` during test/fix phases — prefer interactive or line-oriented reporters for readable failure output.
 
 Examples:
 - Playwright/NX: `npx nx run myapp:playwright:staging -- --reporter=line <file>`
@@ -63,7 +63,7 @@ Domain context for fixing verify findings. Include the single-failing-file run c
 
 ### `## fix_verify_cmd`
 
-Domain context for fixing a failing `verify_cmds` entry (lint/typecheck/build/i18n/dead-code/etc.). Notes about per-check fix patterns specific to this project belong here (e.g. "translation keys live in `apps/web/locales/`", "lint config: `.eslintrc.cjs`").
+Domain context for fixing a failing `test_cmds` entry during the verify_cmds phase (lint/typecheck/build/i18n/dead-code/etc.). Notes about per-check fix patterns specific to this project belong here (e.g. "translation keys live in `apps/web/locales/`", "lint config: `.eslintrc.cjs`").
 
 ### `## verify`
 
@@ -71,7 +71,7 @@ Domain context for the audit. The harness already supplies the audit-only stance
 
 ### `## harden`
 
-Domain context for the harden pass. Notes about per-area quality concerns (e.g. "this area uses optional chaining heavily — flag any `!.` non-null assertions"). Do **not** include shell commands or test-runner invocations — those belong in the plan's `verify_cmds:` frontmatter list.
+Domain context for the harden pass. Notes about per-area quality concerns (e.g. "this area uses optional chaining heavily — flag any `!.` non-null assertions"). Do **not** include shell commands or test-runner invocations — those belong in the plan's `test_cmds:` frontmatter field.
 
 ### `## prototype`
 

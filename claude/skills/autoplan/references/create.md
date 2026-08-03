@@ -7,14 +7,14 @@ Use AskUserQuestion (up to 2 rounds, max 4 questions each).
 **Round 1 — Identity:**
 - Task name (becomes filename slug and PR title base)
 - Branch name (e.g. `feat/auth-refactor`)
-- Test command (e.g. `npm run test:ai`)
+- Test command(s) for `test_cmds` (e.g. `npm run test:ai`)
 - PR title
 
 **Round 2 — Domain rules:**
 - Task description: 2-3 sentences summarising what needs to be built and why (becomes the `description` frontmatter field, shown in progress output)
 - Domain-specific conventions for implementation (imports, patterns, file locations)
 - Domain-specific verification checks (what to audit beyond "tests pass")
-- Does this plan have flows that can't (or shouldn't) be auto-tested? If yes, create a companion `.md` file with step-by-step instructions and set `manual_test: <path>` in frontmatter. The harness runs it after `test_cmd` passes and deletes the file on completion.
+- Does this plan have flows that can't (or shouldn't) be auto-tested? If yes, create a companion `.md` file with step-by-step instructions and set `manual_test: <path>` in frontmatter. The harness runs it after `test_cmds` pass and deletes the file on completion.
 - Is UI direction worth settling interactively before implementing? If yes, set `prototype: true` in frontmatter and populate the `## prototype` section of the prompts file with project-specific UI conventions (design tokens, existing components to match, color/spacing conventions, Figma link if available).
 - Any "never do" rules for fix steps (e.g. "never skip tests", "never weaken assertions")
 - How do you run a single failing test file? (e.g. `npx nx run myapp:playwright -- <file>` or `npm run test:ai -- --testPathPattern=<file>`)
@@ -39,33 +39,20 @@ The `commit_msg` frontmatter field must be a quoted single-line gitmoji commit m
 
 Key points for prompts file:
 - Populate all 5 sections with domain-specific rules from Step 1
-- `fix_test` and `fix_verify` must follow the TDD red→green→commit pattern:
+- Prompts sections are **domain context only** — process rules (TDD ordering, "do NOT commit", sentinel write contracts, test integrity, scope discipline) are harness-injected and must NOT be restated. See [prompts-format.md](references/prompts-format.md) for the full forbidden-language list.
+- `fix_test` and `fix_verify` must contain the single-failing-file run command and any domain-specific notes (log paths, helper locations). Replace `[HOW TO RUN SINGLE FAILING FILE]` with the command gathered in Step 1 Round 2:
 
 ```markdown
 ## fix_test
-Tests are failing. Output at $TEST_LOG.
-Follow TDD: red → green → commit.
-1. Read the test output to understand failures.
-2. Run the failing tests to confirm: [HOW TO RUN SINGLE FAILING FILE]
-3. Fix the root cause. Do NOT weaken assertions. Do NOT skip or remove tests.
-4. Re-run tests to confirm they pass.
-5. Commit fixes.
+Single failing file: [HOW TO RUN SINGLE FAILING FILE]
+Test output aggregated at $TEST_LOG (sections: `# Auto Tests`, `# Manual Test Output`).
 
 ## fix_verify
-Verify step found issues. Read $VERIFY_LOG.
-Follow TDD: red → green → commit.
-1. Read each issue.
-2. Run the affected tests to confirm: [HOW TO RUN SINGLE FAILING FILE]
-3. Fix the issues. Do NOT weaken, skip, or remove tests. Do NOT push or open a PR.
-4. Re-run tests to confirm they pass.
-5. Commit fixes.
+Single failing file: [HOW TO RUN SINGLE FAILING FILE]
+Verify findings at $VERIFY_LOG.
 ```
 
-Replace `[HOW TO RUN SINGLE FAILING FILE]` with the command gathered in Step 1 Round 2.
-
-When a chain has multiple PR boundaries that are NOT independent (each layer builds on the previous one's PR), set `stack_base:` on each layer to the previous layer's `branch:`. autoplan then branches each layer off its parent, targets the PR at the parent, registers a GitHub stack, and runs the whole chain without pausing between stacked layers. Leave `stack_base:` off when a boundary's successor should branch fresh off `main` and gate on a human merge. See [plan-format.md](references/plan-format.md#stack_base-stacked-prs).
-
-For multi-repo chains (each plan targets a different git repo), set `cwd:` to the sub-repo path relative to the chain's root directory. Use `branch: <name>` to ensure/create a specific branch in that repo, `branch: <current>` to adopt the current checkout silently, or omit `branch:` to adopt with an interactive chooser. When `cwd:` is set, omit `cd <subdir> &&` from `test_cmd` and `verify_cmds`.
+For multi-repo chains (each plan targets a different git repo), set `cwd:` to the sub-repo path relative to the chain's root directory. Use `branch: <name>` to ensure/create a specific branch in that repo, `branch: <current>` to adopt the current checkout silently, or omit `branch:` to adopt with an interactive chooser. When `cwd:` is set, omit `cd <subdir> &&` from `test_cmds` entries.
 
 ## Step 3: Evaluate Atomicity
 
@@ -85,7 +72,7 @@ If a plan is not atomic, split into a linked chain:
 - Name sub-plans: `<slug>-1.md`, `<slug>-2.md`, etc.
 - **Each sub-plan gets its OWN prompts file**: `<slug>-1-prompts.md`, `<slug>-2-prompts.md`, etc. Start by copying the first plan's prompts file as a baseline for each new sub-plan, then tailor it to that sub-plan's specific Scope (focused fix/verify checks, scope-aware harden hints). Never point multiple plans at the same prompts file.
 - Each sub-plan has own frontmatter:
-  - Inherits `branch`, `test_cmd` from first plan (unless overridden); `pr_title` is optional
+  - Inherits `branch`, `test_cmds` from first plan (unless overridden); `pr_title` is optional
   - `prompts: ./<slug>-N-prompts.md` — points at THIS plan's dedicated prompts file
   - Each sub-plan (except last) has `next: ./<slug>-N+1.md`
 - Each sub-plan has its own **Scope** and **Verification** scoped to just that unit's work

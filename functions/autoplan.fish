@@ -150,9 +150,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         set pr_title (__autoplan_frontmatter $current_plan pr_title)
     end
 
-    # ===== PREFLIGHT (walk whole chain, fail early on all missing requirements) =====
-    __autoplan_preflight $current_plan; or return 1
-
     mkdir -p $__autoplan_root/tmp
 
     set -l base_system_prompt (__autoplan_compose_system base)
@@ -167,12 +164,12 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
     # ===== MAIN LOOP (linked list traversal) =====
     while true
         # ===== PER-PLAN VALIDATION =====
-        set -l _val_test_cmd (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+        set -l _val_test_cmds (__autoplan_frontmatter_list $current_plan test_cmds)
         set -l _val_manual_test (__autoplan_manual_test_file $current_plan)
         set -l _val_prompts (__autoplan_prompts_path $current_plan)
         set -l _val_env_files (__autoplan_frontmatter_list $current_plan env_files)
-        if test -z "$_val_test_cmd" -a -z "$_val_manual_test"
-            echo "Error: Plan file must have test_cmd, manual_test, or both: $current_plan" >&2
+        if test (count $_val_test_cmds) -eq 0 -a -z "$_val_manual_test"
+            echo "Error: Plan file must have test_cmds, manual_test, or both: $current_plan" >&2
             return 1
         end
         if test -n "$_val_manual_test" -a ! -f "$_val_manual_test"
@@ -210,7 +207,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
         # Re-read branch per plan
         set -l branch (__autoplan_frontmatter $current_plan branch)
-        set -l stack_base (__autoplan_frontmatter $current_plan stack_base)
 
         if test -z "$branch"; or test "$branch" = "<current>"
             # Adopt-current mode: use whatever branch the repo is on
@@ -266,27 +262,13 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     git -C $plan_cwd checkout $branch
                 end
             else if test "$_fresh_start_phase" = true
-                # New branch: guard dirty tree, then create from stack_base (if set) or origin/main
+                # New branch: guard dirty tree, then create from origin/main
                 if not git -C $plan_cwd diff --quiet HEAD
                     echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
                     return 1
                 end
-                if test -n "$stack_base"
-                    # Stacked layer: branch off the parent. Prefer a local ref, else origin's.
-                    set -l _base_ref
-                    if git -C $plan_cwd show-ref --verify --quiet refs/heads/$stack_base
-                        set _base_ref $stack_base
-                    else if git -C $plan_cwd show-ref --verify --quiet refs/remotes/origin/$stack_base
-                        set _base_ref origin/$stack_base
-                    else
-                        echo "Error: stack_base '$stack_base' not found as a local or origin branch." >&2
-                        return 1
-                    end
-                    git -C $plan_cwd checkout --no-track -b $branch $_base_ref
-                else
-                    git -C $plan_cwd fetch origin main
-                    git -C $plan_cwd checkout --no-track -b $branch origin/main
-                end
+                git -C $plan_cwd fetch origin main
+                git -C $plan_cwd checkout --no-track -b $branch origin/main
             else
                 echo "Error: Branch '$branch' not found locally (expected when resuming)." >&2
                 return 1
@@ -327,14 +309,14 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 set -l proto_dir $sandbox/src/prototypes
                 set -l proto_url "http://localhost:$port"
                 set -l _pp (__autoplan_prompts_path $current_plan)
-                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
                 set -l proto_sub (__autoplan_build_user_prompt \
                     prototype-prompt.md DOMAIN_PROTOTYPE prototype \
                     "$_pp" $current_plan $branch "$_tc" \
                     --proto-dir "$proto_dir" --proto-url "$proto_url" | string collect --allow-empty)
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan prototype) \
-                    --permission-mode $permission_mode --agent architect \
+                    --permission-mode $permission_mode --model 'opus[1m]' \
                     --append-system-prompt "$prototype_system_prompt" "$proto_sub"
                 set -l _st $__autoplan_last_status
                 __autoplan_prototype_server_stop $srv_pid
@@ -350,7 +332,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "🛠️  Implement..."
 
             set -l _pp (__autoplan_prompts_path $current_plan)
-            set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+            set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
             set -l impl_sub (__autoplan_build_user_prompt \
                 implement-prompt.md DOMAIN_IMPLEMENT implement \
                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -358,7 +340,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             rm -f $__autoplan_root/tmp/autoplan-step-result.txt
             __autoplan_run_headless $plan_cwd \
                 (__autoplan_session_name $current_plan implement) \
-                $permission_mode worker "$implement_system_prompt" "$impl_sub"
+                $permission_mode 'opus[1m]' "$implement_system_prompt" "$impl_sub"
             if test $__autoplan_last_status -eq 130
                 echo "⚠️  Implement interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                 return 1
@@ -389,65 +371,133 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         end
 
         # ===== TEST/FIX LOOP =====
+        # Sequential per-command: run each command independently; fix and re-run only the
+        # failing command; advance to the next only after it passes.
         if not __autoplan_check_skip test_fix
             __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan test_fix $pr_title
-            set -l fix_attempt 0
-            set -l last_fix_uuid ""
 
-            while true
-                echo ""
-                echo "🧪 Running tests..."
+            set -l _all_cmds (__autoplan_frontmatter_list $current_plan test_cmds)
+            set -l _mf (__autoplan_manual_test_file $current_plan)
+            set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
+            set -l _env_prefix (__autoplan_env_prefix $_ef | string collect --allow-empty)
+            set -l _pp (__autoplan_prompts_path $current_plan)
+            set -l _all_tc (string join \n -- $_all_cmds)
 
-                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
-                set -l _mf (__autoplan_manual_test_file $current_plan)
-                set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
-                __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
-                set -l _run_st $status
-                if test $_run_st -eq 0
-                    echo "✅ Tests pass."
-                    break
-                else if test $_run_st -eq 130
-                    echo "⚠️  Test run interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
-                    return 1
-                else
-                    set fix_attempt (math $fix_attempt + 1)
-                    if test $fix_attempt -gt $max_fix_attempts
-                        echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
-                        echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
-                        if __autoplan_can_steer; and test -n "$last_fix_uuid"
-                            __autoplan_resume_headed $plan_cwd $last_fix_uuid $permission_mode \
-                                "Tests are still failing after $max_fix_attempts attempts. Fix the remaining issues. Test output: $__autoplan_root/tmp/autoplan-test-output.txt" \
-                                true
-                            if test $__autoplan_last_status -eq 130
-                                echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+            # Run each automated command as an independent checkpoint
+            for _cmd in $_all_cmds
+                set _cmd (string trim $_cmd)
+                test -z "$_cmd"; and continue
+                set -l cmd_fix_attempt 0
+                set -l cmd_last_fix_uuid ""
+
+                while true
+                    echo ""
+                    echo "🧪 Running: $_env_prefix$_cmd"
+                    echo -n >$__autoplan_root/tmp/autoplan-test-output.txt
+                    echo "▶ $_env_prefix$_cmd" | tee -a $__autoplan_root/tmp/autoplan-test-output.txt
+                    env -C $plan_cwd fish -c "$_env_prefix$_cmd" 2>&1 | tee -a $__autoplan_root/tmp/autoplan-test-output.txt
+                    set -l _cmd_st $pipestatus[1]
+                    if test $_cmd_st -eq 130
+                        echo "⚠️  Test run interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                        return 1
+                    else if test $_cmd_st -eq 0
+                        echo "✅ Pass: $_cmd"
+                        break
+                    else
+                        set cmd_fix_attempt (math $cmd_fix_attempt + 1)
+                        if test $cmd_fix_attempt -gt $max_fix_attempts
+                            echo "⚠️  '$_cmd' still failing after $max_fix_attempts fix attempts." >&2
+                            echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
+                            if __autoplan_can_steer; and test -n "$cmd_last_fix_uuid"
+                                __autoplan_resume_headed $plan_cwd $cmd_last_fix_uuid $permission_mode \
+                                    "'$_cmd' is still failing after $max_fix_attempts attempts. Fix the remaining issues. Test output: $__autoplan_root/tmp/autoplan-test-output.txt" \
+                                    true
+                                if test $__autoplan_last_status -eq 130
+                                    echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                                    return 1
+                                end
+                                set cmd_fix_attempt 0
+                                continue
+                            else
                                 return 1
                             end
-                            set fix_attempt 0
-                            continue
-                        else
+                        end
+
+                        echo "⚠️  '$_cmd' failing (attempt $cmd_fix_attempt/$max_fix_attempts). Fixing..."
+
+                        set -l fix_prompt (__autoplan_build_user_prompt \
+                            fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
+                            "$_pp" $current_plan $branch "$_all_tc" | string collect --allow-empty)
+
+                        __autoplan_run_headless $plan_cwd \
+                            (__autoplan_session_name $current_plan fix-test) \
+                            $permission_mode "" "$fix_test_system_prompt" "$fix_prompt"
+                        set cmd_last_fix_uuid $__autoplan_last_uuid
+                        if test $__autoplan_last_status -eq 130
+                            echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                             return 1
                         end
                     end
+                end
+            end
 
-                    echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
-
-                    set -l _pp (__autoplan_prompts_path $current_plan)
-                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
-                    set -l fix_prompt (__autoplan_build_user_prompt \
-                        fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
-                        "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
-
-                    __autoplan_run_headless $plan_cwd \
-                        (__autoplan_session_name $current_plan fix-test) \
-                        $permission_mode worker "$fix_test_system_prompt" "$fix_prompt"
-                    set last_fix_uuid $__autoplan_last_uuid
-                    if test $__autoplan_last_status -eq 130
-                        echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+            # Run manual test after all automated commands pass
+            if test -n "$_mf"
+                set -l mt_fix_attempt 0
+                set -l mt_last_fix_uuid ""
+                while true
+                    echo ""
+                    echo "🧪 Running manual test: $_mf"
+                    echo -n >$__autoplan_root/tmp/autoplan-test-output.txt
+                    echo "▶ manual_test $_mf" | tee -a $__autoplan_root/tmp/autoplan-test-output.txt
+                    env -C $plan_cwd fish -c "manual_test $_mf" 2>&1 | tee -a $__autoplan_root/tmp/autoplan-test-output.txt
+                    set -l _mt_st $pipestatus[1]
+                    if test $_mt_st -eq 130
+                        echo "⚠️  Test run interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                         return 1
+                    else if test $_mt_st -eq 0
+                        echo "✅ Manual test pass."
+                        break
+                    else
+                        set mt_fix_attempt (math $mt_fix_attempt + 1)
+                        if test $mt_fix_attempt -gt $max_fix_attempts
+                            echo "⚠️  Manual test still failing after $max_fix_attempts fix attempts." >&2
+                            echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
+                            if __autoplan_can_steer; and test -n "$mt_last_fix_uuid"
+                                __autoplan_resume_headed $plan_cwd $mt_last_fix_uuid $permission_mode \
+                                    "Manual test is still failing after $max_fix_attempts attempts. Fix the remaining issues. Test output: $__autoplan_root/tmp/autoplan-test-output.txt" \
+                                    true
+                                if test $__autoplan_last_status -eq 130
+                                    echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                                    return 1
+                                end
+                                set mt_fix_attempt 0
+                                continue
+                            else
+                                return 1
+                            end
+                        end
+
+                        echo "⚠️  Manual test failing (attempt $mt_fix_attempt/$max_fix_attempts). Fixing..."
+
+                        set -l fix_prompt (__autoplan_build_user_prompt \
+                            fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
+                            "$_pp" $current_plan $branch "$_all_tc" | string collect --allow-empty)
+
+                        __autoplan_run_headless $plan_cwd \
+                            (__autoplan_session_name $current_plan fix-test) \
+                            $permission_mode "" "$fix_test_system_prompt" "$fix_prompt"
+                        set mt_last_fix_uuid $__autoplan_last_uuid
+                        if test $__autoplan_last_status -eq 130
+                            echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                            return 1
+                        end
                     end
                 end
             end
+
+            echo "✅ All tests pass."
         end
 
         # ===== HARDEN + VERIFY (separate invocations with fix loop) =====
@@ -469,7 +519,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 rm -f $__autoplan_root/tmp/autoplan-verify-result.txt
 
                 set -l _pp (__autoplan_prompts_path $current_plan)
-                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
                 set -l harden_sub (__autoplan_build_user_prompt \
                     harden-prompt.md DOMAIN_HARDEN harden \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -477,7 +527,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 __autoplan_run_headless $plan_cwd \
                     (__autoplan_session_name $current_plan harden) \
-                    $permission_mode worker "$harden_system_prompt" "$harden_sub"
+                    $permission_mode "" "$harden_system_prompt" "$harden_sub"
                 set -l _harden_uuid $__autoplan_last_uuid
                 if test $__autoplan_last_status -eq 130
                     echo "⚠️  Harden interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -507,7 +557,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 echo "🔎 Verify (audit-only, pass $verify_pass/$max_verify_passes)..."
 
                 set -l _pp (__autoplan_prompts_path $current_plan)
-                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
                 set -l verify_sub (__autoplan_build_user_prompt \
                     verify-prompt.md DOMAIN_VERIFY verify \
                     "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -533,7 +583,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     echo "⚠️  Verify found issues. Fixing..."
 
                     set -l _pp (__autoplan_prompts_path $current_plan)
-                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
                     set -l fix_verify_prompt (__autoplan_build_user_prompt \
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
@@ -542,56 +592,52 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     set -l _st $__autoplan_last_status
                     if __autoplan_step_interrupted $_st; return 1; end
 
-                    # Reset fix attempts and re-run test/fix loop
-                    set fix_attempt 0
-                    set last_fix_uuid ""
+                    # Re-run all tests after verify fix (using existing run_tests helper)
+                    set -l refix_attempt 0
+                    set -l refix_last_uuid ""
                     while true
                         echo ""
                         echo "🧪 Re-running tests after verify fix..."
-
-                        set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                        set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
                         set -l _mf (__autoplan_manual_test_file $current_plan)
                         set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
                         __autoplan_run_tests $plan_cwd "$_tc" $__autoplan_root/tmp/autoplan-test-output.txt "$_mf" $_ef
-                        set -l _run_st $status
-                        if test $_run_st -eq 0
+                        set -l _rerun_st $status
+                        if test $_rerun_st -eq 0
                             echo "✅ Tests pass."
                             break
-                        else if test $_run_st -eq 130
+                        else if test $_rerun_st -eq 130
                             echo "⚠️  Test run interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                             return 1
                         else
-                            set fix_attempt (math $fix_attempt + 1)
-                            if test $fix_attempt -gt $max_fix_attempts
+                            set refix_attempt (math $refix_attempt + 1)
+                            if test $refix_attempt -gt $max_fix_attempts
                                 echo "⚠️  Tests still failing after $max_fix_attempts fix attempts." >&2
                                 echo "Test output: $__autoplan_root/tmp/autoplan-test-output.txt" >&2
-                                if __autoplan_can_steer; and test -n "$last_fix_uuid"
-                                    __autoplan_resume_headed $plan_cwd $last_fix_uuid $permission_mode \
+                                if __autoplan_can_steer; and test -n "$refix_last_uuid"
+                                    __autoplan_resume_headed $plan_cwd $refix_last_uuid $permission_mode \
                                         "Tests are still failing after $max_fix_attempts attempts. Fix the remaining issues. Test output: $__autoplan_root/tmp/autoplan-test-output.txt" \
                                         true
                                     if test $__autoplan_last_status -eq 130
                                         echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                                         return 1
                                     end
-                                    set fix_attempt 0
+                                    set refix_attempt 0
                                     continue
                                 else
                                     return 1
                                 end
                             end
-
-                            echo "⚠️  Tests failing (attempt $fix_attempt/$max_fix_attempts). Fixing..."
-
+                            echo "⚠️  Tests failing (attempt $refix_attempt/$max_fix_attempts). Fixing..."
                             set -l _pp (__autoplan_prompts_path $current_plan)
-                            set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                            set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
                             set -l refix_prompt (__autoplan_build_user_prompt \
                                 fix-test-prompt.md DOMAIN_FIX_TEST fix_test \
                                 "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
-
                             __autoplan_run_headless $plan_cwd \
                                 (__autoplan_session_name $current_plan fix-test) \
-                                $permission_mode worker "$fix_test_system_prompt" "$refix_prompt"
-                            set last_fix_uuid $__autoplan_last_uuid
+                                $permission_mode "" "$fix_test_system_prompt" "$refix_prompt"
+                            set refix_last_uuid $__autoplan_last_uuid
                             if test $__autoplan_last_status -eq 130
                                 echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                                 return 1
@@ -606,49 +652,57 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             end
         end
 
-        # ===== VERIFY_CMDS (deterministic harness-driven checks) =====
+        # ===== VERIFY_CMDS (all-run over test_cmds with CI=true, aggregate report) =====
+        # Runs every test_cmds command regardless of earlier failures, emits per-command
+        # PASS/FAIL markers, then on any failure calls fix_verify_cmd once with the
+        # bundled report and repeats the full run up to max_fix_attempts.
         if not __autoplan_check_skip verify_cmds
             __autoplan_pause_exit_window; or return 1
             __autoplan_save_state $current_plan verify_cmds $pr_title
 
-            set -l verify_cmds (__autoplan_frontmatter_list $current_plan verify_cmds)
-            if test (count $verify_cmds) -gt 0
+            set -l _vc_cmds (__autoplan_frontmatter_list $current_plan test_cmds)
+            if test (count $_vc_cmds) -gt 0
                 set -l _ef (__autoplan_frontmatter_list $current_plan env_files)
                 set -l vc_env_prefix (__autoplan_env_prefix $_ef | string collect --allow-empty)
                 set -l vc_attempt 0
                 set -l last_vc_uuid ""
                 while true
-                    set -l vc_failed_cmd ""
-                    set -l vc_failed_status 0
-                    for vc in $verify_cmds
+                    set -l vc_any_failed false
+                    echo "" >$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                    echo "# Verify Run — CI=true all-commands" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+
+                    for vc in $_vc_cmds
                         echo ""
-                        echo "▶ verify_cmd: $vc_env_prefix$vc"
-                        env -C $plan_cwd CI=true fish -c $vc_env_prefix$vc >$__autoplan_root/tmp/autoplan-verify-cmd-raw.txt 2>&1
-                        set vc_failed_status $status
-                        cat $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
-                        if test $vc_failed_status -eq 130
-                            echo "⚠️  verify_cmd interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                        echo "▶ CI=true $vc_env_prefix$vc"
+                        echo "" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                        echo "## Command: $vc" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                        env -C $plan_cwd CI=true fish -c "$vc_env_prefix$vc" 2>&1 | tee -a $__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                        set -l _vc_st $pipestatus[1]
+                        if test $_vc_st -eq 130
+                            echo "⚠️  verify_cmds interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                             return 1
                         end
-                        if test $vc_failed_status -ne 0
-                            set vc_failed_cmd $vc
-                            break
+                        if test $_vc_st -eq 0
+                            echo "PASS: $vc" | tee -a $__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                        else
+                            echo "FAIL: $vc (exit $_vc_st)" | tee -a $__autoplan_root/tmp/autoplan-verify-cmd-output.txt
+                            set vc_any_failed true
                         end
                     end
 
-                    if test -z "$vc_failed_cmd"
+                    if test "$vc_any_failed" = false
                         echo "✅ verify_cmds all passed."
-                        rm -f $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
+                        rm -f $__autoplan_root/tmp/autoplan-verify-cmd-output.txt
                         break
                     end
 
                     set vc_attempt (math $vc_attempt + 1)
                     if test $vc_attempt -gt $max_fix_attempts
-                        echo "⚠️  verify_cmd '$vc_failed_cmd' still failing after $max_fix_attempts fix attempts." >&2
+                        echo "⚠️  verify_cmds still failing after $max_fix_attempts fix attempts." >&2
                         echo "Log: $__autoplan_root/tmp/autoplan-verify-cmd-output.txt" >&2
                         if __autoplan_can_steer; and test -n "$last_vc_uuid"
                             __autoplan_resume_headed $plan_cwd $last_vc_uuid $permission_mode \
-                                "verify_cmd '$vc_failed_cmd' is still failing after $max_fix_attempts attempts. Fix it. See log: $__autoplan_root/tmp/autoplan-verify-cmd-output.txt" \
+                                "verify_cmds still failing after $max_fix_attempts attempts. Fix all failing commands. See aggregate report: $__autoplan_root/tmp/autoplan-verify-cmd-output.txt" \
                                 true
                             if test $__autoplan_last_status -eq 130
                                 echo "⚠️  Fix steer interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -661,24 +715,17 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         end
                     end
 
-                    echo "## Failing command" >$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
-                    echo "$vc_failed_cmd" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
-                    echo "" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
-                    echo "## Output" >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
-                    cat $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt >>$__autoplan_root/tmp/autoplan-verify-cmd-output.txt
-                    rm -f $__autoplan_root/tmp/autoplan-verify-cmd-raw.txt
-
-                    echo "⚠️  verify_cmd failing (attempt $vc_attempt/$max_fix_attempts). Fixing..."
+                    echo "⚠️  verify_cmds failing (attempt $vc_attempt/$max_fix_attempts). Fixing..."
 
                     set -l _pp (__autoplan_prompts_path $current_plan)
-                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+                    set -l _tc (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
                     set -l fix_vc_prompt (__autoplan_build_user_prompt \
                         fix-verify-cmd-prompt.md DOMAIN_FIX_VERIFY_CMD fix_verify_cmd \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
                     __autoplan_run_headless $plan_cwd \
                         (__autoplan_session_name $current_plan fix-verify-cmd) \
-                        $permission_mode worker "$fix_verify_cmd_system_prompt" "$fix_vc_prompt"
+                        $permission_mode "" "$fix_verify_cmd_system_prompt" "$fix_vc_prompt"
                     set last_vc_uuid $__autoplan_last_uuid
                     if test $__autoplan_last_status -eq 130
                         echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -716,7 +763,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
         # Save next plan path, commit_msg, and snapshots BEFORE deleting plan file
         set -l next_plan (__autoplan_frontmatter $current_plan next)
         set -l commit_msg (__autoplan_frontmatter $current_plan commit_msg)
-        set snap_test_cmd (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmd))
+        set snap_test_cmd (string join \n -- (__autoplan_frontmatter_list $current_plan test_cmds))
         set snap_branch   (__autoplan_frontmatter $current_plan branch)
         set snap_cwd_raw  (__autoplan_frontmatter $current_plan cwd)
 
@@ -743,18 +790,40 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
             set -l _commit_log $__autoplan_root/tmp/autoplan-commit-output.txt
 
-            # commit_msg is guaranteed present by the preflight — deterministic commit, no LLM.
-            if test -n "$(git -C $plan_cwd status --porcelain)"
-                git -C $plan_cwd add -A
-                git -C $plan_cwd commit -m "$commit_msg" 2>&1 | tee $_commit_log
-                set -l _commit_st $pipestatus[1]
-                if test $_commit_st -ne 0
-                    echo "⚠️  Commit failed (likely pre-commit hooks). Recovering..." >&2
-                    __autoplan_commit_recover $plan_cwd $current_plan $branch "$snap_test_cmd" "$commit_msg" $permission_mode "$base_system_prompt"
-                    or return 1
+            if test -n "$commit_msg"
+                if test -n "$(git -C $plan_cwd status --porcelain)"
+                    git -C $plan_cwd add -A
+                    git -C $plan_cwd commit -m "$commit_msg" 2>&1 | tee $_commit_log
+                    set -l _commit_st $pipestatus[1]
+                    if test $_commit_st -ne 0
+                        echo "⚠️  Commit failed (likely pre-commit hooks). Recovering..." >&2
+                        __autoplan_commit_recover $plan_cwd $current_plan $branch "$snap_test_cmd" "$commit_msg" $permission_mode "$base_system_prompt"
+                        or return 1
+                    end
+                else
+                    echo "ℹ️  Nothing to commit."
                 end
             else
-                echo "ℹ️  Nothing to commit."
+                # Fallback: no commit_msg in frontmatter → let Haiku author the commit
+                set -l commit_prompt (__autoplan_interpolate_prompt \
+                    (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
+                    $current_plan $branch $snap_test_cmd)
+                rm -f $__autoplan_root/tmp/autoplan-step-result.txt
+                env -C $plan_cwd claude -p --output-format stream-json --verbose \
+                    --name (__autoplan_session_name $current_plan commit) \
+                    --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" \
+                    --model haiku --effort medium "$commit_prompt" | format-claude-stream | tee $_commit_log
+                set -l _st $pipestatus[1]
+                if test $_st -eq 130
+                    echo "⚠️  Step interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
+                    return 1
+                end
+                if not test -f $__autoplan_root/tmp/autoplan-step-result.txt; \
+                    or not head -1 $__autoplan_root/tmp/autoplan-step-result.txt | string match -qr '^ALL_GOOD'
+                    echo "⚠️  Haiku commit step failed. Attempting headed recovery..." >&2
+                    __autoplan_commit_recover $plan_cwd $current_plan $branch "$snap_test_cmd" "" $permission_mode "$base_system_prompt"
+                    or return 1
+                end
             end
         end
 
@@ -776,28 +845,20 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
             rm -f $__autoplan_root/tmp/autoplan-pr-body.txt
 
-            # Diff base: each stacked layer shows only its own diff against its parent.
-            set -l diff_base origin/main
-            if test -n "$stack_base"
-                set diff_base $stack_base
-            end
-
             set -l pr_body_sub (__autoplan_interpolate_prompt \
                 (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
-                $current_plan $branch $snap_test_cmd \
-                | string replace -a -- '$DIFF_BASE' "$diff_base")
+                $current_plan $branch $snap_test_cmd)
 
             set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
             set -l team_name "autoplan-cr-$team_slug"
             set -l cr_orch (cat "$HOME/.claude/skills/autoplan/references/chain-review-pr-orchestrator.md" \
                 | string replace -a -- '$PLAN_FILE' "$current_plan" \
                 | string replace -a -- '$BRANCH' "$branch" \
-                | string replace -a -- '$DIFF_BASE' "$diff_base" \
                 | string replace -a -- '$PLAN_DIR' "$plan_dir" \
                 | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
                 | string replace -a -- '$TEAM_NAME' "$team_name")
 
-            __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --agent architect --effort medium "$cr_orch"
+            __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
             set -l _cr_st $__autoplan_last_status
             if test $_cr_st -eq 130
                 echo "⚠️  Chain review interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -808,16 +869,10 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
             if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
                 echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
-            else if env -C $plan_cwd gh pr view $branch >/dev/null 2>&1
+            else if gh pr view $branch >/dev/null 2>&1
                 echo "PR already exists for $branch."
             else
-                if test -n "$stack_base"
-                    env -C $plan_cwd gh pr create --base $stack_base --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
-                    # Register the Stack object on GitHub (parent → child), after the PR exists.
-                    env -C $plan_cwd gh stack link $stack_base $branch
-                else
-                    env -C $plan_cwd gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
-                end
+                gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
             end
         end
 
@@ -833,12 +888,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 echo "❌ Next plan not found: $next_plan" >&2
                 return 1
             end
-            # Whether we pause at this PR boundary depends on the NEXT plan: if it
-            # stacks on this one (stack_base:), keep going — GitHub retargets/rebases
-            # children as parents merge, so no human merge gate is needed.
-            set -l next_stack_base (__autoplan_frontmatter $next_plan stack_base)
-            if test -n "$pr_title"; and test -z "$next_stack_base"
-                # PR boundary with a non-stacked successor: pause for review/merge, save state pointing at next plan
+            if test -n "$pr_title"
+                # PR boundary: pause for review/merge, save state pointing at next plan
                 set current_plan $next_plan
                 __autoplan_pause_exit_window; or return 1
                 __autoplan_save_state $current_plan implement ""
@@ -866,150 +917,6 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 end
 
 # --- Helper functions ---
-
-function __autoplan_plan_cwd --argument-names plan_file --description "Resolve a plan's cwd (relative anchored to run root); echoes absolute path or empty if not found"
-    set -l raw (__autoplan_frontmatter $plan_file cwd)
-    test -z "$raw"; and set raw .
-    set -l resolved
-    if string match -q '/*' $raw
-        set resolved $raw
-    else
-        set resolved $__autoplan_root/$raw
-    end
-    realpath $resolved 2>/dev/null
-end
-
-function __autoplan_preflight --argument-names start_plan --description "Walk the whole chain and accumulate all missing-requirement errors; returns 1 if any"
-    set -l errors
-
-    # yq underpins every frontmatter read — check it before anything else.
-    if not type -q yq
-        echo "Error: yq is not installed (required for frontmatter parsing). Install with: brew install yq" >&2
-        return 1
-    end
-
-    set -l needs_gh false
-    set -l needs_stack false
-    set -l chain_branches   # branch: of every plan visited so far (for stack_base resolution)
-    set -l stack_checks     # deferred "branch|cwd" stack_base validations
-    set -l visited
-
-    # Walk the linked list with a cycle guard.
-    set -l plan $start_plan
-    while test -n "$plan"
-        set -l real (realpath $plan 2>/dev/null)
-        test -z "$real"; and break
-        if contains -- $real $visited
-            break
-        end
-        set -a visited $real
-
-        set -l label (__autoplan_display_rel $__autoplan_root $real)
-
-        # Per-plan requirement checks (mirror of the in-loop block).
-        set -l _tc (string join \n -- (__autoplan_frontmatter_list $real test_cmd))
-        set -l _mt (__autoplan_manual_test_file $real)
-        set -l _pp (__autoplan_prompts_path $real)
-        set -l _ef (__autoplan_frontmatter_list $real env_files)
-        if test -z "$_tc" -a -z "$_mt"
-            set -a errors "$label: must have test_cmd, manual_test, or both."
-        end
-        if test -n "$_mt" -a ! -f "$_mt"
-            set -a errors "$label: manual_test file not found: $_mt"
-        end
-        if test -n "$_pp" -a ! -f "$_pp"
-            set -a errors "$label: prompts file not found: $_pp"
-        end
-        if test (count $_ef) -gt 0; and not type -q dotenvx
-            set -a errors "$label: uses env_files but dotenvx is not installed. Install with: brew install dotenvx/brew/dotenvx"
-        end
-        set -l _cm (__autoplan_frontmatter $real commit_msg)
-        if test -z "$_cm"
-            set -a errors "$label: commit_msg is required (single-line gitmoji message)."
-        end
-
-        set -l _pr (__autoplan_frontmatter $real pr_title)
-        test -n "$_pr"; and set needs_gh true
-
-        set -l _branch (__autoplan_frontmatter $real branch)
-        set -l _stack_base (__autoplan_frontmatter $real stack_base)
-        if test -n "$_stack_base"
-            set needs_stack true
-            set -l _cwd (__autoplan_plan_cwd $real)
-            # A stack_base may name a branch produced by an earlier plan in this
-            # chain; defer resolution so earlier branches are already recorded.
-            set -a stack_checks "$label"\t"$_stack_base"\t"$_cwd"\t"$(string join , -- $chain_branches)"
-        end
-        test -n "$_branch"; and set -a chain_branches $_branch
-
-        # Advance to next plan.
-        set -l next_val (__autoplan_frontmatter $real next)
-        if test -z "$next_val"
-            break
-        end
-        if string match -q '/*' $next_val
-            set plan $next_val
-        else
-            set plan (dirname $real)/$next_val
-        end
-    end
-
-    # Global tool checks, gated on the chain actually needing them.
-    if test "$needs_gh" = true; or test "$needs_stack" = true
-        if not type -q gh
-            set -a errors "chain has pr_title/stack_base but gh is not installed. Install with: brew install gh"
-        else if not gh auth status >/dev/null 2>&1
-            set -a errors "gh is not authenticated. Run: gh auth login"
-        end
-    end
-    if test "$needs_stack" = true
-        if type -q gh; and not gh extension list 2>/dev/null | string match -q '*github/gh-stack*'
-            set -a errors "chain uses stack_base but the gh-stack extension is not installed. Install with: gh extension install github/gh-stack"
-        end
-    end
-
-    # Deferred stack_base resolution: existing ref OR an earlier plan's branch.
-    for check in $stack_checks
-        set -l parts (string split \t -- $check)
-        set -l label $parts[1]
-        set -l base $parts[2]
-        set -l cwd $parts[3]
-        set -l earlier (string split , -- $parts[4])
-        if contains -- $base $earlier
-            continue
-        end
-        set -l found false
-        if test -n "$cwd"
-            if git -C $cwd show-ref --verify --quiet refs/heads/$base 2>/dev/null
-                set found true
-            else if git -C $cwd show-ref --verify --quiet refs/remotes/origin/$base 2>/dev/null
-                set found true
-            end
-        end
-        if test "$found" = false
-            set -a errors "$label: stack_base '$base' is neither an existing ref nor a branch created by an earlier plan in the chain."
-        end
-    end
-
-    # Repo-level stacked-PR enablement: only exit code 9 (not enabled) is fatal.
-    if test "$needs_stack" = true; and type -q gh; and test (count $errors) -eq 0
-        set -l stack_cwd (__autoplan_plan_cwd $start_plan)
-        if test -n "$stack_cwd"
-            env -C $stack_cwd gh stack view >/dev/null 2>&1
-            if test $status -eq 9
-                set -a errors "repo does not have stacked PRs enabled (gh stack view exit 9). Enable stacked PRs for this repository in GitHub settings."
-            end
-        end
-    end
-
-    if test (count $errors) -gt 0
-        echo "❌ Preflight failed:" >&2
-        for e in $errors
-            echo "  • $e" >&2
-        end
-        return 1
-    end
-end
 
 function __autoplan_compose_system --description "Concatenate prompt-block files into a single system prompt"
     set -l dir "$HOME/.config/fish/functions/autoplan_prompts"
@@ -1252,7 +1159,7 @@ function __autoplan_commit_recover --description "Headed recovery for a failed c
         --name (__autoplan_session_name $_cr_plan commit-recover) \
         --permission-mode $_cr_perm \
         --append-system-prompt "$_cr_base" \
-        --agent architect \
+        --model 'opus[1m]' \
         "$_prompt"
 
     if test $__autoplan_last_status -eq 130
@@ -1294,27 +1201,29 @@ function __autoplan_can_steer --description "True when running in an interactive
 end
 
 function __autoplan_run_headless --description "Run headless step with pre-assigned session id; sets globals __autoplan_last_uuid/__autoplan_last_status"
-    # args: plan_cwd session_name perm_mode agent system_prompt user_prompt
-    # `agent` names a definition in ~/.claude/agents/ — the only place a model is
-    # named. Empty falls back to `worker` (the default tier).
+    # args: plan_cwd session_name perm_mode model system_prompt user_prompt
     set -l _hl_cwd $argv[1]
     set -l _hl_name $argv[2]
     set -l _hl_perm $argv[3]
-    set -l _hl_agent $argv[4]
+    set -l _hl_model $argv[4]
     set -l _hl_sys $argv[5]
     set -l _hl_prompt $argv[6]
-    if test -z "$_hl_agent"
-        set _hl_agent worker
-    end
     set -g __autoplan_last_uuid (uuidgen | string lower)
     # Default to interrupted (130): if rapid Ctrl-C interrupts fish before the
     # trailing assignment runs, the caller's 130 check still aborts cleanly
     # instead of crashing on an empty value.
     set -g __autoplan_last_status 130
-    env -C $_hl_cwd claude -p --output-format stream-json --verbose \
-        --session-id $__autoplan_last_uuid --name $_hl_name \
-        --permission-mode $_hl_perm --agent $_hl_agent \
-        --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
+    if test -n "$_hl_model"
+        env -C $_hl_cwd claude -p --output-format stream-json --verbose \
+            --session-id $__autoplan_last_uuid --name $_hl_name \
+            --permission-mode $_hl_perm --model $_hl_model \
+            --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
+    else
+        env -C $_hl_cwd claude -p --output-format stream-json --verbose \
+            --session-id $__autoplan_last_uuid --name $_hl_name \
+            --permission-mode $_hl_perm --model "claude-sonnet-4-6" \
+            --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
+    end
     set -g __autoplan_last_status $pipestatus[1]
 end
 
@@ -1325,9 +1234,8 @@ function __autoplan_claude_headed --description "Run claude headed via the tmux 
     set -g __autoplan_last_status 130
     pushd $_ch_dir
     set -l _ch_args $argv[2..-1]
-    # Model is never named here — agent definitions in claude/agents/ own it.
-    if not contains -- --agent $_ch_args
-        set _ch_args --agent worker $_ch_args
+    if not contains -- --model $_ch_args
+        set _ch_args --model claude-sonnet-4-6 $_ch_args
     end
     claude $_ch_args
     set -g __autoplan_last_status $status
