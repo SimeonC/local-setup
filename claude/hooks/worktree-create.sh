@@ -15,7 +15,7 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 repo_root=$(git -C "$cwd" rev-parse --show-toplevel)
 repo=$(basename "$repo_root")
 
-base_dir="$HOME/Development/worktrees/$repo"
+base_dir="$HOME/Development/.worktrees/$repo"
 mkdir -p "$base_dir"
 
 # Honor worktree.baseRef: fresh -> branch from origin's default branch.

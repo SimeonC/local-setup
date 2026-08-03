@@ -49,6 +49,7 @@ source ~/.config/fish/functions/secure/secure_env.fish; or true
 direnv hook fish | source
 
 # Aliases
+alias fish_reload "source ~/.config/fish/config.fish"
 alias strt start
 alias dv dev
 alias tst test_run
@@ -72,6 +73,8 @@ alias record "replayio record"
 alias dclaude danger_claude
 alias cclaude 'claude --continue'
 alias qclaude quick_claude
+alias kwatch 'git difftool'
+alias tower 'gittower .'
 
 function npm --wraps npm
     _npm_with_auth_refresh npm $argv

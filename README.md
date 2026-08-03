@@ -1,14 +1,13 @@
 # Setup Instructions
 
-### Install Homebrew
-
-```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
 ### Install basic packages
 
+`./setup.sh` (see below) installs Homebrew if missing, then installs all base packages. Homebrew and these packages are listed here for reference / manual install:
+
 ```sh
+# Homebrew (setup.sh runs this automatically when brew is missing)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
 brew install git
 brew install jq
 brew install fish
@@ -18,12 +17,17 @@ brew install mdcat
 brew install glow
 brew install dotenvx/brew/dotenvx # required by autoplan's env_files frontmatter
 brew install yq # required by autoplan's frontmatter parsing
+brew install gh # required by autoplan's PR phase and prclaude
+brew install fzf # required by setup.sh's pickers and autoplan's branch/root pickers
+brew install colima docker # container runtime
+gh extension install github/gh-stack # required by autoplan's stack_base frontmatter (setup.sh prompts to install)
 ```
 
-### Setup Colima (Docker)
+`setup.sh` prompts (via fzf) for the default agent model and whether to install the gh-stack extension — no env vars required.
+
+### Start Colima (Docker)
 
 ```sh
-brew install colima docker
 colima start --cpu 4 --memory 8 --disk 100 --vm-type vz --mount-type sshfs --ssh-agent --activate --save-config
 ```
 

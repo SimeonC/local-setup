@@ -9,6 +9,7 @@ branch: feat/...           # optional — git branch intent: present = ensure/cr
 test_cmd: npm run test:ai   # required — command(s) to run tests
 manual_test: ./plan-name.manual.md  # optional — path to manual test instructions file
 pr_title: "..."             # optional — PR boundary marker: present = raise PR then autoplan stops for review/merge; omit = no PR, fold into next plan (commits only)
+stack_base: feat/prev-layer # optional — parent branch this layer stacks on: branch off it (not origin/main), PR targets it, and register a GitHub stack. See stack_base section.
 prompts: ./<slug>-N-prompts.md # required — path to THIS plan's dedicated prompts file (one prompts file per plan, never shared)
 verify_cmds:                # optional — YAML list of deterministic shell commands run by the harness between harden_verify and commit
   - npm run lint:fix
@@ -43,6 +44,16 @@ commit_msg: "✨ Add ..."     # required — single-line gitmoji commit message 
 - **`branch: <current>`** — adopt-current mode, **silent**: use whatever branch the repo is on, no chooser prompt.
 - **`branch:` omitted** — adopt-current mode, **interactive**: a searchable fzf chooser appears pre-filled with the current branch; press Enter to keep it, or type a new name to create it off HEAD. Degrades silently if non-interactive or `fzf` is missing.
 
+### stack_base: Stacked PRs
+
+`stack_base: <branch>` opts a PR layer into a GitHub stacked pull request (requires the `github/gh-stack` extension and a repo with stacked PRs enabled). It only makes sense on a plan that has both `branch:` and `pr_title:`. Effects:
+
+- **Branch creation**: the branch is created off `stack_base` instead of `origin/main` (local ref preferred, else `origin/<stack_base>`).
+- **PR create**: `gh pr create --base <stack_base>`, then `gh stack link <stack_base> <branch>` registers the parent→child stack on GitHub. Each PR shows only its own layer's diff.
+- **No pause**: normally a `pr_title:` plan pauses after raising its PR so you merge before the next plan. When the **next** plan has a `stack_base:`, autoplan does NOT pause — it keeps running the whole stack in one invocation. GitHub auto-retargets/rebases children as parents merge. A `pr_title:` boundary whose successor has no `stack_base:` still pauses as before (so mixed chains work).
+
+**Parent branch may not exist yet.** A `stack_base` usually names the `branch:` of an earlier plan in the same chain — that branch is created when the earlier plan runs, not before. The up-front preflight accepts a `stack_base` that either resolves to an existing ref *or* matches the `branch:` of an earlier plan in the chain; it only fails when it is neither.
+
 ### verify_cmds: Deterministic Verification Commands
 
 `verify_cmds` is an optional YAML list of shell commands executed by the fish harness (not Claude) between the `harden_verify` and `commit` phases. Use it for deterministic checks — lint, typecheck, build, test suites, i18n checks — where Claude exercises zero judgment on success. The harness runs each command in order, fail-fast: on the first non-zero exit, Claude is invoked with the `fix_verify_cmd` prompt to fix the failing command, then the loop restarts from the first command (to catch regressions from the fix). `test_cmd` still runs separately during the test/fix phase before harden.
@@ -55,7 +66,7 @@ commit_msg: "✨ Add ..."     # required — single-line gitmoji commit message 
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmd` or leave as a no-op)
 - **Both**: `test_cmd: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `branch:`, `next:`, `pr_title:`, `manual_test:`, `env_files:`, and `cwd:` are required. `commit_msg` is technically optional (harness falls back to a Haiku LLM commit), but should always be set — omitting it is a quality gap flagged by refine. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
+All fields except `branch:`, `next:`, `pr_title:`, `stack_base:`, `manual_test:`, `env_files:`, and `cwd:` are required — including `commit_msg`, which the preflight now enforces (a missing `commit_msg` fails the run before any work). Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
 
 ## Body Sections
 

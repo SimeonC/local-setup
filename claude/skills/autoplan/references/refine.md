@@ -10,11 +10,12 @@
 
 For each plan, check all required frontmatter fields are present and non-empty:
 - `description` — must be a quoted single-line string (2-3 sentences). If missing, generate one from the plan's Context + Scope sections and add it.
-- `commit_msg` — must be a quoted single-line gitmoji message. If missing, generate one from the plan's title/Context/Scope and add it. Use gitmoji conventions: `✨` new feature, `🐛` bug fix, `♻️` refactor, `🔧` config/tooling, `📝` docs, `✅` tests, `🚀` performance, `🔥` remove, `💄` UI/style, `🔒` security.
+- `commit_msg` — REQUIRED, must be a quoted single-line gitmoji message. The harness preflight fails the run if it is missing. If absent, generate one from the plan's title/Context/Scope and add it. Use gitmoji conventions: `✨` new feature, `🐛` bug fix, `♻️` refactor, `🔧` config/tooling, `📝` docs, `✅` tests, `🚀` performance, `🔥` remove, `💄` UI/style, `🔒` security.
 - `test_cmd` (or `manual_test`), `prompts` — flag any missing as errors.
 - `branch:` — optional; omitting = adopt-current with interactive chooser; `<current>` = adopt-current silently (no chooser). Flag any `create_branch:` key as deprecated and remove it.
 - `cwd:` — if set, verify the path exists relative to the run root. If `test_cmd` or `verify_cmds` contain a `cd <subdir> &&` prefix that matches `cwd:`, flag as redundant and remove.
 - `prototype:` — optional boolean; omitting or `false` = no prototype phase; `true` = interactive Vite+Svelte prototype phase runs before `implement`. Flag any non-boolean value as an error.
+- `stack_base:` — optional; only meaningful on a plan that also has `branch:` and `pr_title:`. When a chain has multiple non-independent PR boundaries, each layer should set `stack_base:` to the previous layer's `branch:`. Verify each `stack_base` either resolves to an existing ref or matches an earlier plan's `branch:` in the chain; flag if neither. Flag `stack_base` on a plan with no `pr_title:` as meaningless.
 
 ## Step 3: Chain Integrity
 

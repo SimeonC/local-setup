@@ -1,4 +1,5 @@
 function claude --wraps=claude --description 'Claude Code with tmux session management'
+    open "kaleidoscope://changeset?path=$PWD"
     # Pass-through for non-interactive subcommands
     if test (count $argv) -ge 1
         switch "$argv[1]"

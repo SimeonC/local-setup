@@ -11,14 +11,14 @@ Call `TeamCreate(team_name: "$TEAM_NAME", description: "Autoplan chain-review + 
 
 ## Step 1: Spawn the chain-review teammate
 
-Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "chain-review"`, `subagent_type: "general-purpose"` to review commits. Pass this prompt verbatim:
+Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "chain-review"`, `subagent_type: "architect"` to review commits. Pass this prompt verbatim:
 
 ```
 Review the completed autoplan chain on branch `$BRANCH`.
 
 ## Step 1: Review commits
-Run: `git log --oneline origin/main..$BRANCH`
-Cross-check each commit against the PR intent and branch diff (`git diff origin/main..$BRANCH`) to verify nothing was missed or left incomplete.
+Run: `git log --oneline $DIFF_BASE..$BRANCH`
+Cross-check each commit against the PR intent and branch diff (`git diff $DIFF_BASE..$BRANCH`) to verify nothing was missed or left incomplete.
 
 ## Step 2: Summary
 Print a brief summary of what was completed and flag anything that looks incomplete.
@@ -28,7 +28,7 @@ After the teammate finishes, dismiss it: `SendMessage(to: "chain-review", messag
 
 ## Step 2: Spawn the PR-body teammate
 
-Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "pr-body"`, `subagent_type: "general-purpose"`, `model: "haiku"` to generate the PR body. Pass this prompt verbatim:
+Spawn a teammate via `Agent` with `team_name: "$TEAM_NAME"`, `name: "pr-body"`, `subagent_type: "worker"` to generate the PR body. Do not pass a `model` param — the agent definition owns the model. Pass this prompt verbatim:
 
 ```
 $PR_BODY_PROMPT

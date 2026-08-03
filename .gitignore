@@ -17,3 +17,5 @@ secure
 fish_variables*
 /claude/devcontainer/.rebuild-hashes/
 .playwright-cli
+*_tc
+*_tc.*

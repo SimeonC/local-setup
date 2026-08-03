@@ -1,10 +1,10 @@
-Generate a pull request summary for branch `$BRANCH` against `origin/main`.
+Generate a pull request summary for branch `$BRANCH` against `$DIFF_BASE`.
 
 ## Data sources
 
-- Run `git log origin/main..$BRANCH --oneline` to see all commits.
-- Run `git diff origin/main...$BRANCH --stat` to see changed files.
-- Run `git diff origin/main...$BRANCH` for the full diff if needed for context.
+- Run `git log $DIFF_BASE..$BRANCH --oneline` to see all commits.
+- Run `git diff $DIFF_BASE...$BRANCH --stat` to see changed files.
+- Run `git diff $DIFF_BASE...$BRANCH` for the full diff if needed for context.
 
 ## Output
 

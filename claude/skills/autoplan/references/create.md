@@ -63,6 +63,8 @@ Follow TDD: red → green → commit.
 
 Replace `[HOW TO RUN SINGLE FAILING FILE]` with the command gathered in Step 1 Round 2.
 
+When a chain has multiple PR boundaries that are NOT independent (each layer builds on the previous one's PR), set `stack_base:` on each layer to the previous layer's `branch:`. autoplan then branches each layer off its parent, targets the PR at the parent, registers a GitHub stack, and runs the whole chain without pausing between stacked layers. Leave `stack_base:` off when a boundary's successor should branch fresh off `main` and gate on a human merge. See [plan-format.md](references/plan-format.md#stack_base-stacked-prs).
+
 For multi-repo chains (each plan targets a different git repo), set `cwd:` to the sub-repo path relative to the chain's root directory. Use `branch: <name>` to ensure/create a specific branch in that repo, `branch: <current>` to adopt the current checkout silently, or omit `branch:` to adopt with an interactive chooser. When `cwd:` is set, omit `cd <subdir> &&` from `test_cmd` and `verify_cmds`.
 
 ## Step 3: Evaluate Atomicity
