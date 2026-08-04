@@ -32,8 +32,8 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 ## Delegation
 
-- **Lead agents**: When suitable invoke the `swarm` skill both when planning a task AND when implementing a plan. When implementing code, invoke `tdd` via the Skill tool (not when planning — only when executing code changes). `swarm` owns all sub-agent/team/model-routing/context rules; each agent definition owns its own behaviour.
-- **Sub-agents**: If you were spawned by another agent via `Agent(subagent_type: ...)`, you ARE the delegation. Do NOT invoke `swarm` or `tdd` skills — execute the scoped work you were given. Follow TDD principles in your implementation without invoking the skill.
+- **Lead agents**: When suitable invoke the `swarm` skill when highly parrellised work is necessary. When implementing code, invoke `tdd` via the Skill tool (not when planning — only when executing code changes). `swarm` owns all sub-agent/team/model-routing/context rules; each agent definition owns its own behaviour. Instructions for sub-agent/teams agents should explicitly pass down the instructions from the `tdd` skill when it's relevant to their work.
+- **Sub-agents**: If you were spawned by another agent via `Agent(subagent_type: ...)`, you ARE the delegation. Do NOT invoke `swarm` or `tdd` skills — execute the scoped work you were given.
 - **Always delegate committing** via `Agent(subagent_type: "committer")`.
 
 ## Pull Requests
