@@ -12,7 +12,8 @@ For each plan, check all required frontmatter fields are present and non-empty:
 - `description` — must be a quoted single-line string (2-3 sentences). If missing, generate one from the plan's Context + Scope sections and add it.
 - `commit_msg` — must be a quoted single-line gitmoji message. If missing, generate one from the plan's title/Context/Scope and add it. Use gitmoji conventions: `✨` new feature, `🐛` bug fix, `♻️` refactor, `🔧` config/tooling, `📝` docs, `✅` tests, `🚀` performance, `🔥` remove, `💄` UI/style, `🔒` security.
 - `test_cmds` (or `manual_test`), `prompts` — flag any missing as errors. Flag old `test_cmd` key as deprecated and rename to `test_cmds`.
-- `branch:` — optional; omitting = adopt-current with interactive chooser; `<current>` = adopt-current silently (no chooser). Flag any `create_branch:` key as deprecated and remove it.
+- `branch:` — optional; omitting = adopt-current with interactive chooser; `<current>` = adopt-current silently (no chooser).
+- `source:` — optional base for a newly created branch, used for branch creation AND the PR target; consulted only when a branch is created. Valid values: `<stack>` (base off and target the predecessor branch — stacked PR), a branch name (base off and target that branch), or omitted (`origin/main`). Flag a non-empty `source:` on a plan whose `branch:` is omitted or `<current>` as ineffective (no branch is created). If `source: <stack>` is set, verify the plan sets an explicit `branch: <name>` and follows an earlier plan (via `next:`) whose branch it can stack on.
 - `cwd:` — if set, verify the path exists relative to the run root. If `test_cmds` entries contain a `cd <subdir> &&` prefix that matches `cwd:`, flag as redundant and remove.
 - `prototype:` — optional boolean; omitting or `false` = no prototype phase; `true` = interactive Vite+Svelte prototype phase runs before `implement`. Flag any non-boolean value as an error.
 

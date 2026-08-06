@@ -19,3 +19,4 @@ fish_variables*
 .playwright-cli
 *_tc
 *_tc.*
+/claude/skills/graphify

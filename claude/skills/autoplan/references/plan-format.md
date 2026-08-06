@@ -6,6 +6,7 @@
 ---
 description: "2-3 sentence summary of what this plan does and why."  # required — shown in progress output
 branch: feat/...           # optional — git branch intent: present = ensure/create this branch; omit = adopt current checkout (interactive per-cwd chooser); `<current>` = adopt silently (no chooser)
+source: <stack>            # optional — base for a NEWLY CREATED branch, used for branch creation AND the PR target (+ review diff base): `<stack>` = the predecessor plan's branch (stacked PR); a branch name = base off and target that branch; omit = origin/main
 test_cmds: |               # required — command(s) to run tests (scalar or multi-line list)
   npm run test:unit:ai
   npm run test:integration:ai
@@ -37,9 +38,19 @@ commit_msg: "✨ Add ..."     # required — single-line gitmoji commit message 
 
 `branch:` encodes intent, not just a name:
 
-- **`branch: <name>`** — ensure this branch: checkout if present locally; if absent and not resuming, create from `origin/main` (dirty-tree guard + `git fetch origin main` first).
+- **`branch: <name>`** — ensure this branch: checkout if present locally; if absent and not resuming, create from the base named by `source:` (default `origin/main`; dirty-tree guard + `git fetch` of remote sources first). See `source:` below.
 - **`branch: <current>`** — adopt-current mode, **silent**: use whatever branch the repo is on, no chooser prompt.
 - **`branch:` omitted** — adopt-current mode, **interactive**: a searchable fzf chooser appears pre-filled with the current branch; press Enter to keep it, or type a new name to create it off HEAD. Degrades silently if non-interactive or `fzf` is missing.
+
+### source: Stacked Branch Base
+
+`source:` sets the base a branch is created from **and** the branch the resulting PR targets (and the base used for chain-review / PR-body diffs). It is consulted **only when a branch is actually created** (`branch: <name>` that doesn't yet exist and isn't resuming); it is ignored when the branch already exists or when adopting the current checkout.
+
+- **omitted** — create off `origin/main`, PR targets `main` (default, backward compatible).
+- **`source: <stack>`** — the **stacking switch**. Base = the current branch, i.e. the just-built predecessor plan's branch. The branch is created off the predecessor, the GitHub PR is opened with `--base <predecessor>`, and the chain-review / PR-body diffs are taken against the predecessor (so only this plan's commits appear). The harness errors if the predecessor resolves to the same name as the target branch (nothing to stack on).
+- **`source: <branch-name>`** — base off **and** target that named branch: the branch is created off it, the PR is opened with `--base <branch-name>`, and diffs are against it. Use to stack on a branch that isn't the immediately-preceding plan. Unlike `<stack>`, autoplan does not skip the review pause for a named base.
+
+`<stack>` resolves to the repo's current branch at the branch step — the prior iteration leaves the repo checked out on the predecessor, so no state is persisted. When a completed PR plan's `next:` plan uses `source: <stack>`, autoplan does **not** stop for review/merge; it keeps building so the whole stack is raised in one run (a `🔗 Stacking next plan on …` line is printed). Non-stacked PR chains (including a named `source:` base) keep the existing stop-per-PR pause.
 
 ### test_cmds: Automated and Manual Verification
 
@@ -63,7 +74,7 @@ For flows that can't be auto-tested, set `manual_test` to a path pointing to a c
 - **Manual only**: `manual_test: ./auth-refresh.manual.md` (omit `test_cmds` or leave as a no-op)
 - **Both**: `test_cmds: npm run test:ai` + `manual_test: ./auth-refresh.manual.md`
 
-All fields except `branch:`, `next:`, `pr_title:`, `manual_test:`, `env_files:`, and `cwd:` are required. `commit_msg` is technically optional (harness falls back to a Haiku LLM commit), but should always be set — omitting it is a quality gap flagged by refine. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
+All fields except `branch:`, `source:`, `next:`, `pr_title:`, `manual_test:`, `env_files:`, and `cwd:` are required. `commit_msg` is technically optional (harness falls back to a Haiku LLM commit), but should always be set — omitting it is a quality gap flagged by refine. Paths in `prompts`, `manual_test`, and `next` are resolved relative to the plan file's directory; paths in `env_files` are resolved relative to the directory autoplan runs from.
 
 ## Body Sections
 
@@ -129,4 +140,39 @@ Access tokens expire after 1 hour. Currently users are logged out; we need silen
 ## Verification
 - `npm run test:ai -- --testPathPattern=user-auth.service`
 - `npm run lint:ai`
+```
+
+### Stacked PR example
+
+Two plans, each raising its own PR, where the second PR stacks on the first. Plan 1 is a
+normal `origin/main`-based PR; plan 2 sets `source: <stack>` so its branch is created off
+`feat/pr1`, its PR targets `feat/pr1`, and autoplan builds both in one run without stopping
+between them.
+
+First plan (`checkout-flow-1.md`):
+
+```yaml
+---
+description: "Add the cart-summary service that the checkout page will consume."
+branch: feat/pr1
+test_cmds: npm run test:ai
+pr_title: "Add cart-summary service"
+prompts: ./checkout-flow-1-prompts.md
+next: ./checkout-flow-2.md
+commit_msg: "✨ Add cart-summary service"
+---
+```
+
+Second plan (`checkout-flow-2.md`) — stacks on plan 1:
+
+```yaml
+---
+description: "Add the checkout page that consumes the cart-summary service from PR 1."
+branch: feat/pr2
+source: <stack>
+test_cmds: npm run test:ai
+pr_title: "Add checkout page"
+prompts: ./checkout-flow-2-prompts.md
+commit_msg: "✨ Add checkout page consuming cart-summary"
+---
 ```

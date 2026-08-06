@@ -123,18 +123,31 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             set -l _progress_plan ""
             set -l _progress_phase ""
             set -l _progress_pr_title ""
+            set -l _progress_source ""
+            set -l _progress_diff ""
+            set -l _progress_stack ""
             for _line in (cat $__autoplan_root/.autoplan-progress)
                 set -l _parts (string split -m 1 '=' $_line)
                 switch $_parts[1]
-                    case plan;      set _progress_plan $_parts[2]
-                    case phase;     set _progress_phase $_parts[2]
-                    case pr_title;  set _progress_pr_title $_parts[2]
+                    case plan;          set _progress_plan $_parts[2]
+                    case phase;         set _progress_phase $_parts[2]
+                    case pr_title;      set _progress_pr_title $_parts[2]
+                    case source_branch; set _progress_source $_parts[2]
+                    case diff_base;     set _progress_diff $_parts[2]
+                    case stack_base;    set _progress_stack $_parts[2]
                 end
             end
             set -l _pp_real (realpath $_progress_plan 2>/dev/null)
             if test "$_pp_real" = "$current_plan"
                 set -g skip_to_phase $_progress_phase
                 set pr_title $_progress_pr_title
+                # Stash the persisted stacking context; the main loop applies it for a
+                # resumed `<stack>` plan (which cannot re-derive its predecessor base).
+                if test -n "$_progress_stack"
+                    set -g __autoplan_resumed_source_branch $_progress_source
+                    set -g __autoplan_resumed_diff_base $_progress_diff
+                    set -g __autoplan_resumed_stack_base $_progress_stack
+                end
                 set_color brblack; echo "  phase=$skip_to_phase"; set_color normal
             end
         end
@@ -163,6 +176,17 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
     # ===== MAIN LOOP (linked list traversal) =====
     while true
+        # Per-iteration stacking state, reset each plan. __autoplan_stack_base non-empty
+        # => the created branch bases off (and its PR targets) a predecessor branch;
+        # __autoplan_diff_base is the base used for chain-review / PR-body diffs. Both
+        # stay at defaults unless a branch is created with source: <stack>. Globals so
+        # __autoplan_save_state can persist them for resume (see below).
+        set -g __autoplan_stack_base ""
+        set -g __autoplan_diff_base origin/main
+        # Source branch is included in every phase prompt so agents stay on the
+        # requested base instead of defaulting their comparisons to main.
+        set -g __autoplan_source_branch origin/main
+
         # ===== PER-PLAN VALIDATION =====
         set -l _val_test_cmds (__autoplan_frontmatter_list $current_plan test_cmds)
         set -l _val_manual_test (__autoplan_manual_test_file $current_plan)
@@ -203,6 +227,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "Error: cwd '$plan_cwd_raw' not found for plan $current_plan" >&2
             return 1
         end
+        open "kaleidoscope://changeset?path=$plan_cwd"
         __autoplan_activate_tools $plan_cwd
 
         # Re-read branch per plan
@@ -262,13 +287,40 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     git -C $plan_cwd checkout $branch
                 end
             else if test "$_fresh_start_phase" = true
-                # New branch: guard dirty tree, then create from origin/main
+                # New branch: guard dirty tree, then create from source (default origin/main)
                 if not git -C $plan_cwd diff --quiet HEAD
                     echo "Error: Uncommitted changes in working tree. Commit or stash before running autoplan." >&2
                     return 1
                 end
-                git -C $plan_cwd fetch origin main
-                git -C $plan_cwd checkout --no-track -b $branch origin/main
+                set -l source (__autoplan_frontmatter $current_plan source)
+                if test "$source" = "<stack>"
+                    # Stacking switch: base off the current (predecessor) branch.
+                    set source (git -C $plan_cwd branch --show-current)
+                    if test -z "$source"
+                        echo "Error: source: <stack> but repo at '$plan_cwd' is in detached HEAD — cannot resolve predecessor branch." >&2
+                        return 1
+                    end
+                    if test "$source" = "$branch"
+                        echo "Error: source: <stack> resolved to '$source', the same as target branch '$branch' — nothing to stack on." >&2
+                        return 1
+                    end
+                else if test -z "$source"
+                    set source origin/main
+                end
+                set -g __autoplan_source_branch $source
+                # Fetch remote sources before branching off them
+                if string match -q 'origin/*' $source
+                    git -C $plan_cwd fetch origin (string replace 'origin/' '' $source)
+                end
+                git -C $plan_cwd checkout --no-track -b $branch $source
+                # Base is also the PR target + review/PR-body diff base. origin/main is the
+                # default (gh targets main with no explicit --base); any other base — the
+                # <stack> predecessor or an explicit branch name — is both branched off and
+                # targeted, with diffs taken against it.
+                set -g __autoplan_diff_base $source
+                if not test "$source" = origin/main
+                    set -g __autoplan_stack_base (string replace -r '^origin/' '' $source)
+                end
             else
                 echo "Error: Branch '$branch' not found locally (expected when resuming)." >&2
                 return 1
@@ -280,6 +332,38 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 return 1
             end
         end
+
+        # Resolve stacking context for prompts + PR base in paths where the
+        # branch-creation path did NOT run this iteration (adopt-current, existing
+        # branch, resume). A named source is deterministic and safe to re-derive from
+        # frontmatter. `<stack>` is NOT: at this point the repo is checked out on the
+        # target branch (not the predecessor), so `git branch --show-current` would
+        # resolve to the target and make the PR target itself. Its value therefore
+        # comes only from the creation path (continuous run) or persisted state (resume).
+        set -l _decl_source (__autoplan_frontmatter $current_plan source)
+        if test -z "$_decl_source"
+            set _decl_source origin/main
+        end
+        if test "$_decl_source" = "<stack>"
+            # Recover from persisted state on resume; otherwise leave whatever the
+            # creation path set this iteration. Never resolve via the current branch.
+            if set -q __autoplan_resumed_stack_base
+                set -g __autoplan_source_branch $__autoplan_resumed_source_branch
+                set -g __autoplan_diff_base $__autoplan_resumed_diff_base
+                set -g __autoplan_stack_base $__autoplan_resumed_stack_base
+            end
+        else
+            set -g __autoplan_source_branch $_decl_source
+            set -g __autoplan_diff_base $_decl_source
+            if test "$_decl_source" != origin/main
+                set -g __autoplan_stack_base (string replace -r '^origin/' '' $_decl_source)
+            end
+        end
+        # Resumed context applies only to the resumed plan; clear so subsequent plans
+        # in a continuous run derive their own stacking state.
+        set -e __autoplan_resumed_source_branch
+        set -e __autoplan_resumed_diff_base
+        set -e __autoplan_resumed_stack_base
 
         set -l plan_desc (__autoplan_frontmatter $current_plan description)
         echo ""
@@ -316,7 +400,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     --proto-dir "$proto_dir" --proto-url "$proto_url" | string collect --allow-empty)
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan prototype) \
-                    --permission-mode $permission_mode --model 'opus[1m]' \
+                    --permission-mode $permission_mode --agent custom-planner \
                     --append-system-prompt "$prototype_system_prompt" "$proto_sub"
                 set -l _st $__autoplan_last_status
                 __autoplan_prototype_server_stop $srv_pid
@@ -340,7 +424,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             rm -f $__autoplan_root/tmp/autoplan-step-result.txt
             __autoplan_run_headless $plan_cwd \
                 (__autoplan_session_name $current_plan implement) \
-                $permission_mode 'opus[1m]' "$implement_system_prompt" "$impl_sub"
+                $permission_mode custom-planner "$implement_system_prompt" "$impl_sub"
             if test $__autoplan_last_status -eq 130
                 echo "⚠️  Implement interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                 return 1
@@ -432,7 +516,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                         __autoplan_run_headless $plan_cwd \
                             (__autoplan_session_name $current_plan fix-test) \
-                            $permission_mode "" "$fix_test_system_prompt" "$fix_prompt"
+                            $permission_mode custom-worker "$fix_test_system_prompt" "$fix_prompt"
                         set cmd_last_fix_uuid $__autoplan_last_uuid
                         if test $__autoplan_last_status -eq 130
                             echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -487,7 +571,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                         __autoplan_run_headless $plan_cwd \
                             (__autoplan_session_name $current_plan fix-test) \
-                            $permission_mode "" "$fix_test_system_prompt" "$fix_prompt"
+                            $permission_mode custom-worker "$fix_test_system_prompt" "$fix_prompt"
                         set mt_last_fix_uuid $__autoplan_last_uuid
                         if test $__autoplan_last_status -eq 130
                             echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -527,7 +611,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 __autoplan_run_headless $plan_cwd \
                     (__autoplan_session_name $current_plan harden) \
-                    $permission_mode "" "$harden_system_prompt" "$harden_sub"
+                    $permission_mode custom-worker "$harden_system_prompt" "$harden_sub"
                 set -l _harden_uuid $__autoplan_last_uuid
                 if test $__autoplan_last_status -eq 130
                     echo "⚠️  Harden interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -564,7 +648,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                 __autoplan_claude_headed $plan_cwd \
                     --name (__autoplan_session_name $current_plan verify) \
-                    --permission-mode $permission_mode \
+                    --permission-mode $permission_mode --agent custom-reviewer \
                     --append-system-prompt "$verify_system_prompt" "$verify_sub"
                 if test $__autoplan_last_status -eq 130
                     echo "⚠️  Verify interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -588,7 +672,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
+                    __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --agent custom-worker --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
                     set -l _st $__autoplan_last_status
                     if __autoplan_step_interrupted $_st; return 1; end
 
@@ -812,7 +896,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 env -C $plan_cwd claude -p --output-format stream-json --verbose \
                     --name (__autoplan_session_name $current_plan commit) \
                     --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" \
-                    --model haiku --effort medium "$commit_prompt" | format-claude-stream | tee $_commit_log
+                    --agent custom-committer --effort medium "$commit_prompt" | format-claude-stream | tee $_commit_log
                 set -l _st $pipestatus[1]
                 if test $_st -eq 130
                     echo "⚠️  Step interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -847,7 +931,8 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
             set -l pr_body_sub (__autoplan_interpolate_prompt \
                 (cat "$HOME/.claude/skills/autoplan/references/pr-body-prompt.md") \
-                $current_plan $branch $snap_test_cmd)
+                $current_plan $branch $snap_test_cmd \
+                | string replace -a -- '$DIFF_BASE' "$__autoplan_diff_base")
 
             set -l team_slug (string sub -l 52 -- (string replace -ra '[^A-Za-z0-9_-]' '-' -- $branch))
             set -l team_name "autoplan-cr-$team_slug"
@@ -856,23 +941,28 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 | string replace -a -- '$BRANCH' "$branch" \
                 | string replace -a -- '$PLAN_DIR' "$plan_dir" \
                 | string replace -a -- '$PR_BODY_PROMPT' "$pr_body_sub" \
+                | string replace -a -- '$DIFF_BASE' "$__autoplan_diff_base" \
                 | string replace -a -- '$TEAM_NAME' "$team_name")
 
-            __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --model opusplan --effort medium "$cr_orch"
+            __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --agent custom-reviewer --effort medium "$cr_orch"
             set -l _cr_st $__autoplan_last_status
             if test $_cr_st -eq 130
                 echo "⚠️  Chain review interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                 return 1
             end
 
-            git -C $plan_cwd push origin $branch
+            git -C $plan_cwd push --set-upstream origin $branch
 
             if not test -s $__autoplan_root/tmp/autoplan-pr-body.txt
                 echo "⚠️  PR body not generated ($__autoplan_root/tmp/autoplan-pr-body.txt missing/empty); aborting PR create."
             else if gh pr view $branch >/dev/null 2>&1
                 echo "PR already exists for $branch."
+            else if test -n "$__autoplan_stack_base"
+                echo "Creating PR for $branch against source branch $__autoplan_stack_base"
+                gh pr create --title "$pr_title" --base "$__autoplan_stack_base" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
             else
-                gh pr create --title "$pr_title" --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
+                echo "Creating PR for $branch against source branch main"
+                gh pr create --title "$pr_title" --base main --body-file $__autoplan_root/tmp/autoplan-pr-body.txt
             end
         end
 
@@ -888,18 +978,24 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 echo "❌ Next plan not found: $next_plan" >&2
                 return 1
             end
-            if test -n "$pr_title"
-                # PR boundary: pause for review/merge, save state pointing at next plan
+            set -l next_source (__autoplan_frontmatter $next_plan source)
+            if test -n "$pr_title"; and test "$next_source" != "<stack>"
+                # Non-stacked PR boundary: pause for review/merge, save state pointing at next plan
                 set current_plan $next_plan
                 __autoplan_pause_exit_window; or return 1
                 __autoplan_save_state $current_plan implement ""
                 echo "⏸️  PR raised — review & merge, then run \`autoplan\` to continue"
                 return 0
             else
-                # No PR boundary: fold forward into next plan
+                # Continuous build: fold forward without stopping. Covers non-PR chains and
+                # stacked PRs (next plan bases off this just-built branch), so the whole
+                # stack is raised in one run.
+                if test -n "$pr_title"
+                    echo "🔗 Stacking next plan on $branch…"
+                end
                 set current_plan $next_plan
                 __autoplan_pause_exit_window; or return 1
-                __autoplan_save_state $current_plan implement $pr_title
+                __autoplan_save_state $current_plan implement ""
             end
         else
             break
@@ -1018,8 +1114,10 @@ function __autoplan_build_user_prompt --description "Build a phase user prompt: 
         | string replace -a -- "\$$domain_var" "$domain_text" \
         | string collect --allow-empty)
 
-    # Standard variable interpolation (plan_file, branch, test_cmd, log paths)
+    # Standard variable interpolation (plan_file, branch, source, test_cmd, log paths)
     set -l interpolated (__autoplan_interpolate_prompt "$body" $plan_file $branch $test_cmd)
+    set interpolated (string replace -a -- '$SOURCE_BRANCH' "$__autoplan_source_branch" "$interpolated")
+    set interpolated (printf '%s\n\nSource branch: %s\n' "$interpolated" "$__autoplan_source_branch" | string collect)
 
     # Prototype-specific substitutions (no-op when empty; harness-only vars not in __autoplan_interpolate_prompt)
     printf '%s\n' $interpolated \
@@ -1106,6 +1204,11 @@ function __autoplan_save_state --argument-names plan phase pr_title
     echo "plan=$plan" > $__autoplan_root/.autoplan-progress
     echo "phase=$phase" >> $__autoplan_root/.autoplan-progress
     echo "pr_title=$pr_title" >> $__autoplan_root/.autoplan-progress
+    # Persist stacking context so a resumed `<stack>` plan recovers its predecessor
+    # base (unrecoverable from git once checked out on the target branch).
+    echo "source_branch=$__autoplan_source_branch" >> $__autoplan_root/.autoplan-progress
+    echo "diff_base=$__autoplan_diff_base" >> $__autoplan_root/.autoplan-progress
+    echo "stack_base=$__autoplan_stack_base" >> $__autoplan_root/.autoplan-progress
     set_color brblack
     echo "  phase=$phase"
     echo "↩️  Resume from this phase ($phase) with: autoplan"
@@ -1159,7 +1262,7 @@ function __autoplan_commit_recover --description "Headed recovery for a failed c
         --name (__autoplan_session_name $_cr_plan commit-recover) \
         --permission-mode $_cr_perm \
         --append-system-prompt "$_cr_base" \
-        --model 'opus[1m]' \
+        --agent custom-specialist \
         "$_prompt"
 
     if test $__autoplan_last_status -eq 130
@@ -1201,11 +1304,13 @@ function __autoplan_can_steer --description "True when running in an interactive
 end
 
 function __autoplan_run_headless --description "Run headless step with pre-assigned session id; sets globals __autoplan_last_uuid/__autoplan_last_status"
-    # args: plan_cwd session_name perm_mode model system_prompt user_prompt
+    # args: plan_cwd session_name perm_mode agent system_prompt user_prompt
+    # The agent supplies its model from frontmatter (the gateway single source of
+    # truth); never pass --model here.
     set -l _hl_cwd $argv[1]
     set -l _hl_name $argv[2]
     set -l _hl_perm $argv[3]
-    set -l _hl_model $argv[4]
+    set -l _hl_agent $argv[4]
     set -l _hl_sys $argv[5]
     set -l _hl_prompt $argv[6]
     set -g __autoplan_last_uuid (uuidgen | string lower)
@@ -1213,17 +1318,17 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     # trailing assignment runs, the caller's 130 check still aborts cleanly
     # instead of crashing on an empty value.
     set -g __autoplan_last_status 130
-    if test -n "$_hl_model"
-        env -C $_hl_cwd claude -p --output-format stream-json --verbose \
-            --session-id $__autoplan_last_uuid --name $_hl_name \
-            --permission-mode $_hl_perm --model $_hl_model \
-            --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
-    else
-        env -C $_hl_cwd claude -p --output-format stream-json --verbose \
-            --session-id $__autoplan_last_uuid --name $_hl_name \
-            --permission-mode $_hl_perm --model "claude-sonnet-4-6" \
-            --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
-    end
+    set -g CLR_BLUE "\033[38;2;30;64;160m"
+    set -g CLR_GREEN "\033[38;2;20;96;50m"
+    set -g CLR_ORANGE "\033[38;2;160;80;20m"
+    set -g CLR_RESET "\033[0m"
+
+    printf "${CLR_BLUE}claude${CLR_RESET} [name: ${CLR_GREEN}%s${CLR_RESET}] [agent: ${CLR_GREEN}%s${CLR_RESET}] [permissions: ${CLR_GREEN}%s${CLR_RESET}]" "$_hl_name" "$_hl_agent" "$_hl_perm"
+    printf "       -> ${CLR_ORANGE}%s${CLR_RESET}" "$_hl_prompt"
+    env -C $_hl_cwd claude -p --output-format stream-json --verbose \
+        --session-id $__autoplan_last_uuid --name $_hl_name \
+        --permission-mode $_hl_perm --agent $_hl_agent \
+        --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
     set -g __autoplan_last_status $pipestatus[1]
 end
 
@@ -1234,9 +1339,8 @@ function __autoplan_claude_headed --description "Run claude headed via the tmux 
     set -g __autoplan_last_status 130
     pushd $_ch_dir
     set -l _ch_args $argv[2..-1]
-    if not contains -- --model $_ch_args
-        set _ch_args --model claude-sonnet-4-6 $_ch_args
-    end
+    # Never inject --model. Callers pass --agent (model from its frontmatter);
+    # anything without an agent falls back to the user's own configured default.
     claude $_ch_args
     set -g __autoplan_last_status $status
     popd

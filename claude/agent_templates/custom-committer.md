@@ -1,7 +1,7 @@
 ---
-name: committer
-description: Stages changes and writes a single commit following the repo's convention. Use for every commit — the lead should delegate committing rather than doing it inline.
-model: __DEFAULT_MODEL__
+name: custom-committer
+description: Stages changes and writes ONE commit in the repo's convention. Use PROACTIVELY for every commit — delegate here instead of running git commit inline. Cannot edit code (no write tools); commits only.
+model: __AGENT_MODEL__
 tools: Bash, Read, Grep, Glob
 ---
 

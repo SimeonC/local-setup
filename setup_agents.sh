@@ -1,13 +1,7 @@
 #!/bin/bash
-# Generate ~/.claude/agents/*.md from the checked-in templates in
-# claude/agent_templates/, substituting the default-tier model.
+# Generate ~/.claude/agents/*.md from checked-in templates.
 #
-# Agent frontmatter does NOT interpolate env vars — the literal string is sent
-# to the gateway and rejected. So the model must be baked in at setup time.
-# That is why ~/.claude/agents is generated rather than symlinked, and why no
-# gateway model ID appears in a checked-in file.
-#
-# Usage: sh setup_agents.sh [default-tier-model]
+# Usage: bash setup_agents.sh
 
 set -e
 
@@ -15,59 +9,125 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATE_DIR="$SCRIPT_DIR/claude/agent_templates"
 DEST_DIR="$HOME/.claude/agents"
 
-DEFAULT_MODEL="claude-sonnet-4-6"
-# setup.sh passes the chosen model as $1. When run standalone, prompt via fzf
-# instead of relying on an env var; fall back to the default non-interactively.
-if [ -n "$1" ]; then
-  MODEL="$1"
-elif [ -t 0 ] && command -v fzf >/dev/null 2>&1; then
-  MODEL="$(printf '%s\n' "$DEFAULT_MODEL" "claude-opus-5" "claude-haiku-4-5-20251001" \
-    | fzf --prompt="Default model for explorer/worker agents (type to enter a gateway ID): " \
-          --height=10 --print-query --query="$DEFAULT_MODEL" \
-    | tail -1 || true)"
+CUSTOM_TEMPLATES=(
+  custom-committer custom-explorer custom-planner custom-reviewer
+  custom-specialist custom-worker
+)
+FALLBACK_AGENTS=(anthropic-explorer anthropic-worker anthropic-committer)
+
+curated_models() {
+  printf '%s\n' \
+    $'claude-opus-5\tClaude Opus 5' \
+    $'claude-sonnet-5\tClaude Sonnet 5' \
+    $'claude-opus-4-8\tClaude Opus 4.8' \
+    $'claude-haiku-4-5\tClaude Haiku 4.5' \
+    $'claude-sonnet-4-6\tClaude Sonnet 4.6'
+}
+
+gateway_models() {
+  [ "${CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:-}" = "1" ] || return 1
+  [ -n "${ANTHROPIC_BASE_URL:-}" ] || return 1
+  command -v curl >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+
+  local auth_args=()
+  if [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+    auth_args=(-H "Authorization: Bearer $ANTHROPIC_AUTH_TOKEN")
+  elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    auth_args=(-H "x-api-key: $ANTHROPIC_API_KEY")
+  else
+    return 1
+  fi
+
+  # The gateway only advertises its non-first-party models (anthropic/*) when the
+  # request looks like Claude Code itself, so the claude-cli User-Agent is required.
+  curl -fsS --connect-timeout 5 --max-time 5 \
+    "${auth_args[@]}" \
+    -H "anthropic-version: 2023-06-01" \
+    -A "claude-cli/2.1.222" \
+    "${ANTHROPIC_BASE_URL%/}/v1/models?limit=1000" 2>/dev/null \
+    | jq -r '.data[]? | select((.id | type) == "string" and (.id | test("^(claude|anthropic)")) and (.display_name? | type) == "string" and (.display_name | gsub("^[[:space:]]+|[[:space:]]+$"; "") | length > 0)) | [.id, .display_name] | @tsv' \
+    | awk -F '\t' 'NF >= 2 && !seen[$1]++'
+}
+
+# Pull the single-line `description:` value from a template's frontmatter.
+agent_description() {
+  sed -n 's/^description:[[:space:]]*//p' "$TEMPLATE_DIR/$1.md" | head -n1
+}
+
+select_model() {
+  local agent="$1" desc="$2" cols header
+  cols="$(tput cols 2>/dev/null || echo 80)"
+  # Wrap the description so fzf's header doesn't truncate it at terminal width.
+  header="$(printf '%s' "$desc" | fold -s -w "$([ "$cols" -gt 8 ] && echo $((cols - 4)) || echo 76)")"
+  printf '%s\n' "$MODELS" \
+    | fzf --delimiter=$'\t' --with-nth=2 --accept-nth=1 \
+      --prompt="$agent model: " --height=16 \
+      --header="$header" --header-first
+}
+
+if [ "$#" -ne 0 ]; then
+  echo "error: setup_agents.sh requires interactive per-agent model selections; arguments are not supported" >&2
+  exit 1
 fi
-: "${MODEL:=$DEFAULT_MODEL}"
+if [ ! -t 0 ] || ! command -v fzf >/dev/null 2>&1; then
+  echo "error: setup_agents.sh requires interactive per-agent model selections with fzf installed" >&2
+  exit 1
+fi
+
+MODELS="$(gateway_models || true)"
+if [ -z "$MODELS" ]; then
+  MODELS="$(curated_models)"
+  echo "Gateway model discovery unavailable; using curated model choices." >&2
+else
+  echo "Using models discovered from ${ANTHROPIC_BASE_URL%/}/v1/models." >&2
+fi
+
+CUSTOM_MODELS=()
+for agent in "${CUSTOM_TEMPLATES[@]}"; do
+  model="$(select_model "$agent" "$(agent_description "$agent")")"
+  [ -n "$model" ] || { echo "error: no model selected for $agent" >&2; exit 1; }
+  CUSTOM_MODELS+=("$model")
+done
+FALLBACK_MODELS=()
+for agent in "${FALLBACK_AGENTS[@]}"; do
+  model="$(select_model "$agent" "$(agent_description "custom-${agent#anthropic-}")")"
+  [ -n "$model" ] || { echo "error: no model selected for $agent" >&2; exit 1; }
+  FALLBACK_MODELS+=("$model")
+done
 
 if [ ! -d "$TEMPLATE_DIR" ]; then
   echo "error: no templates at $TEMPLATE_DIR" >&2
   exit 1
 fi
 
-# Earlier setups symlinked this directory; a symlink cannot hold generated files.
 if [ -L "$DEST_DIR" ]; then
   rm "$DEST_DIR"
 fi
 mkdir -p "$DEST_DIR"
+rm -f "$DEST_DIR"/{Explore,general-purpose,Plan,explorer,worker,committer,specialist}.md
 
-for template in "$TEMPLATE_DIR"/*.md; do
-  name="$(basename "$template")"
-  sed "s|__DEFAULT_MODEL__|$MODEL|g" "$template" > "$DEST_DIR/$name"
-done
-
-# Shadow selected built-in roles so they honour a pinned model instead of
-# inheriting the session default. Built-ins cannot be partially overridden — a
-# user agent of the same name fully replaces the built-in (no field merge) — so
-# each shadow reuses an existing template body verbatim with only `name:`
-# swapped. This sources the original template rather than hardcoding a second
-# copy; the source template's own model line is preserved.
-#   Explore <- explorer   general-purpose <- worker
-# (Plan is a first-class template that already carries name: Plan, so the main
-# loop above generates it directly — it overrides the built-in Plan role.)
-shadow_from() {
-  shadow="$1"; src="$2"
-  if [ ! -f "$TEMPLATE_DIR/$src.md" ]; then
-    echo "error: shadow source $src.md missing" >&2
-    exit 1
-  fi
-  sed -e "s|__DEFAULT_MODEL__|$MODEL|g" -e "s|^name: .*|name: $shadow|" \
-    "$TEMPLATE_DIR/$src.md" > "$DEST_DIR/$shadow.md"
+# Escape replacement text so arbitrary model IDs remain exact in sed output.
+sed_replacement() {
+  printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
 }
-shadow_from Explore explorer
-shadow_from general-purpose worker
 
-echo "Agents generated in $DEST_DIR (default tier: $MODEL):"
-for f in "$DEST_DIR"/*.md; do
-  name="$(basename "$f" .md)"
-  echo "  $name -> $(sed -n 's/^model: //p' "$f")"
+generate_from() {
+  local src="$1" name="$2" model="$3" replacement
+  replacement="$(sed_replacement "$model")"
+  sed -e "s|__AGENT_MODEL__|$replacement|g" \
+      -e "s|__DEFAULT_HIGH_MODEL__|$replacement|g" \
+      -e "s|__DEFAULT_LOW_MODEL__|$replacement|g" \
+      -e "s|__DEFAULT_MODEL__|$replacement|g" \
+      -e "s|^name: .*|name: $name|" \
+      "$TEMPLATE_DIR/$src.md" > "$DEST_DIR/$name.md"
+}
+
+for i in "${!CUSTOM_TEMPLATES[@]}"; do
+  generate_from "${CUSTOM_TEMPLATES[$i]}" "${CUSTOM_TEMPLATES[$i]}" "${CUSTOM_MODELS[$i]}"
 done
-echo "Note: the agent registry loads at session start — restart Claude Code to pick these up."
+for i in "${!FALLBACK_AGENTS[@]}"; do
+  agent="${FALLBACK_AGENTS[$i]}"
+  generate_from "custom-${agent#anthropic-}" "$agent" "${FALLBACK_MODELS[$i]}"
+done
+exit 0

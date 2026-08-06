@@ -75,6 +75,11 @@ If a plan is not atomic, split into a linked chain:
   - Inherits `branch`, `test_cmds` from first plan (unless overridden); `pr_title` is optional
   - `prompts: ./<slug>-N-prompts.md` — points at THIS plan's dedicated prompts file
   - Each sub-plan (except last) has `next: ./<slug>-N+1.md`
+  - **Stacked PRs**: when sub-plans each raise their own PR and later PRs should build on
+    earlier ones, give each new stacked branch its own `branch: <name>` plus `source: <stack>`.
+    That bases the branch off the predecessor, targets the predecessor with the GitHub PR, and
+    lets autoplan raise the whole stack in one run (no stop between stacked PRs). The first
+    plan in the stack keeps the default `origin/main` base (no `source:`). See plan-format.md.
 - Each sub-plan has its own **Scope** and **Verification** scoped to just that unit's work
 
 **Recurse:** Evaluate each sub-plan for atomicity. Split further if needed.

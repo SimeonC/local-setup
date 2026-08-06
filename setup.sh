@@ -32,7 +32,7 @@ if command -v brew >/dev/null 2>&1; then
   echo "Installing base dependencies via brew..."
   # `gh` (autoplan PR phase, prclaude) and `fzf` (model/branch/root pickers) are
   # required. colima/docker provide the container runtime.
-  for pkg in git jq fish mise gum mdcat glow yq dotenvx/brew/dotenvx gh fzf colima docker; do
+  for pkg in git jq fish mise gum mdcat glow yq dotenvx/brew/dotenvx gh fzf colima docker uv; do
     brew install "$pkg" || echo "  ⚠️  brew install $pkg failed — continuing"
   done
   # gh extension install is NOT idempotent (errors if already present) — guard it.
@@ -45,6 +45,7 @@ if command -v brew >/dev/null 2>&1; then
       echo "  Skipping gh-stack extension"
     fi
   fi
+  uv tool install graphifyy
 else
   echo "⚠️  Homebrew unavailable — skipping dependency install. Install deps manually (see README)."
 fi
@@ -59,17 +60,9 @@ ln -sfn "$SCRIPT_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
 ln -sfn "$SCRIPT_DIR/claude/skills" ~/.claude/skills
 
 # Claude Code: agents — GENERATED, not symlinked. Agent frontmatter does not
-# interpolate env vars, so the default-tier model is baked in at setup time.
+# interpolate env vars, so each agent's selected model is baked in at setup time.
 # This keeps gateway model IDs out of checked-in files.
-AGENT_MODEL_DEFAULT="claude-sonnet-4-6"
-if [ -t 0 ] && command -v fzf >/dev/null 2>&1; then
-  AGENT_MODEL="$(printf '%s\n' "$AGENT_MODEL_DEFAULT" "claude-opus-5" "claude-haiku-4-5-20251001" \
-    | fzf --prompt="Default model for explorer/worker agents (type to enter a gateway ID): " \
-          --height=10 --print-query --query="$AGENT_MODEL_DEFAULT" \
-    | tail -1 || true)"
-fi
-: "${AGENT_MODEL:=$AGENT_MODEL_DEFAULT}"
-sh "$SCRIPT_DIR/setup_agents.sh" "$AGENT_MODEL"
+bash "$SCRIPT_DIR/setup_agents.sh"
 
 # Claude Code: hooks (symlink individual files, NOT the folder — ~/.claude/hooks
 # also holds machine-local hooks like monitor.sh/statusline.sh that are not in this repo)
@@ -85,7 +78,7 @@ ln -sfn "$SCRIPT_DIR/grit_patterns" ~/.grit/patterns
 echo "Symlinks created:"
 echo "  ~/.claude/CLAUDE.md -> $SCRIPT_DIR/claude/CLAUDE.md"
 echo "  ~/.claude/skills -> $SCRIPT_DIR/claude/skills"
-echo "  ~/.claude/agents  (generated from claude/agent_templates, default tier: $AGENT_MODEL)"
+echo "  ~/.claude/agents  (generated from claude/agent_templates, models selected interactively)"
 for hook in "$SCRIPT_DIR"/claude/hooks/*; do
   echo "  ~/.claude/hooks/$(basename "$hook") -> $hook"
 done
