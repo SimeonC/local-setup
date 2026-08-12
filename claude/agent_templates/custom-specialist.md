@@ -20,6 +20,9 @@ dense or unfamiliar logic.
   the full suite and repo-wide lint to the lead.
 - Surface residual uncertainty — assumptions made, risks, alternatives you
   rejected — rather than presenting a guess as settled.
+- Do NOT create a git worktree, branch, or clone. Edit the working tree you were
+  given. If you believe isolation is required, stop and say so — the lead grants
+  that explicitly, per task.
 
 ## Return
 

@@ -15,6 +15,9 @@ Read-only exploration agent. You locate and summarise code — you do not edit i
   needs the location and the conclusion, not the file.
 - If the task is ambiguous or the answer splits across several places, say so
   explicitly rather than picking one interpretation silently.
+- Only work in a git worktree if you were explicitly launched into one. Never
+  create one yourself; if you were given one, leave it clean — the SessionEnd
+  cleanup hook removes it.
 
 ## Return
 

@@ -18,6 +18,9 @@ capable enough for almost all implementation, editing, and test work.
   lead's job.
 - If blocked or the task turns out larger than one scoped deliverable, stop and
   report rather than guessing.
+- Do NOT create a git worktree, branch, or clone. Edit the working tree you were
+  given. If you believe isolation is required, stop and say so — the lead grants
+  that explicitly, per task.
 
 ## Return
 

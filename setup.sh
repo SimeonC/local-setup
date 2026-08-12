@@ -59,6 +59,9 @@ ln -sfn "$SCRIPT_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
 # Claude Code: skills
 ln -sfn "$SCRIPT_DIR/claude/skills" ~/.claude/skills
 
+# Claude Code: workflows (saved Workflow scripts, invoked by scriptPath/name)
+ln -sfn "$SCRIPT_DIR/claude/workflows" ~/.claude/workflows
+
 # Claude Code: agents — GENERATED, not symlinked. Agent frontmatter does not
 # interpolate env vars, so each agent's selected model is baked in at setup time.
 # This keeps gateway model IDs out of checked-in files.
@@ -75,9 +78,13 @@ done
 mkdir -p ~/.grit
 ln -sfn "$SCRIPT_DIR/grit_patterns" ~/.grit/patterns
 
+echo "Show hidden dot files by default..."
+defaults write com.apple.finder AppleShowAllFiles -boolean true; killall Finder;
+
 echo "Symlinks created:"
 echo "  ~/.claude/CLAUDE.md -> $SCRIPT_DIR/claude/CLAUDE.md"
 echo "  ~/.claude/skills -> $SCRIPT_DIR/claude/skills"
+echo "  ~/.claude/workflows -> $SCRIPT_DIR/claude/workflows"
 echo "  ~/.claude/agents  (generated from claude/agent_templates, models selected interactively)"
 for hook in "$SCRIPT_DIR"/claude/hooks/*; do
   echo "  ~/.claude/hooks/$(basename "$hook") -> $hook"

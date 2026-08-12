@@ -34,15 +34,19 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 ## Delegation and agent spawning
 
 - The lead's context window is scarce: delegate broad reading, searching, research, and self-contained implementation to agents; retain only distilled conclusions, paths, line references, and decisions. Do not accumulate raw file dumps or broad search output.
-- Prefer teams over sub-agents, visibility is better.
-- Use one scoped task per agent. Exploration/search/research uses `custom-explorer`; scoped implementation, edits, and tests use `custom-worker`; promote only genuinely tricky refactors or subtle test failures to `custom-specialist`; use `custom-planner` only for architecture, multi-file design, or chain-review orchestration. Use a team only for 2+ genuinely independent context-heavy streams.
-- Be patient with the sub-agents, SPARK errors are temporary and will go away after a while - confirm with the user before killing/restarting any "failed" team member. It may just be slow.
-- Agents return only file paths, `file:line` references, and 1–2 sentence conclusions per finding; never dump file contents or raw search output. An implementation agent does not also run the full suite, repo-wide lint, or unrelated work.
-- **Model routing is critical:** never pass the `model` parameter to `Agent`; it is a closed enum and can bypass the configured gateway model. `subagent_type` is a role, never a model ID. Models come only from agent-definition frontmatter, which is the single source of truth: `custom-worker`/`custom-explorer`/`custom-committer` use the custom setup model, `custom-specialist` uses its intentional Anthropic fallback, and `custom-planner` uses its intentional planning fallback.
-- Never put model IDs, `${VAR}`, `$VAR`, or `env:VAR` in runtime agent prompts or frontmatter. The default tier is baked into generated agent files by setup; the agent registry loads at session start, so changes require a fresh session.
-- Lead agents invoke the delegation skill when planning or implementing a plan, and invoke `tdd` when implementing code changes (not while planning). Sub-agents are already the delegation: they must not invoke delegation or `tdd` themselves; they execute only their assigned scope. Pass relevant TDD instructions into implementation-agent prompts.
-- Cap teams at 3–4 concurrent teammates. Monitor each task, mark it completed, dismiss the teammate, then spawn the next queued task. One teammate is never reused for a second task. Before ending, shut down remaining teammates and verify the task list.
-- Always delegate committing to `Agent(subagent_type: "custom-committer")`; never commit inline.
+- **Multi-step or broad tasks go through my delegation workflow, not ad-hoc fan-out.** When orchestration is triggered — "ultracode", "use a workflow", or a task needing 2+ agents — run `Workflow({ scriptPath: "~/.claude/workflows/delegate.mjs", args: {...} })`. Never author a throwaway workflow script for this; `delegate.mjs` already encodes the policy (roles, one task per agent, concurrency cap 3, no worktrees for coding, distilled returns). Extend that file if it doesn't fit.
+- `args` shape: `{ task, explore: [{name, prompt, isolate?}], implement: [{name, prompt, role?}], review?: true|string }`. Roles are `explore | implement | hard | plan | review | commit`.
+- **Never pass `model` to `Agent` or `agent()`.** It is a closed enum and bypasses the configured gateway model. `subagent_type`/`agentType` is a role, never a model ID. Models come only from `~/.claude/agents/*.md` frontmatter. If the configured model is unavailable, report the failure rather than substituting one. Never put model IDs, `${VAR}`, `$VAR`, or `env:VAR` in agent prompts or frontmatter — setup bakes the tier in, and the registry loads at session start.
+- When spawning `Agent` directly anyway (single scoped task, no workflow), it must still be a **named** teammate — a nameless/standalone spawn silently falls back to the session model.
+- Be patient with team members, SPARK errors are temporary and will go away after a while - confirm with the user before killing/restarting any "failed" team member. It may just be slow.
+- Invoke `tdd` when implementing code changes (not while planning); pass the relevant TDD instructions into implementation-agent prompts. Teammates execute only their assigned scope — they never invoke `tdd` and never spawn their own agents.
+- Always delegate committing to a `custom-committer` teammate; never commit inline.
+
+## Worktrees (CRITICAL)
+
+- **Agents must NOT create worktrees, branches, or clones for coding work.** Implementation edits the working tree it was given. `isolation: 'worktree'` is never set for implementation agents. If an agent thinks isolation is required, it stops and says so rather than creating one.
+- Temporary worktrees are allowed for **exploration or experimentation only**, and only when explicitly opted into (`isolate: true` in `delegate.mjs`, or my direct instruction). Every such worktree must be cleaned up — unchanged ones are auto-removed, and `cleanup-agent-worktrees.sh` sweeps the rest at SessionEnd.
+- I may explicitly authorise a worktree for coding; that authorisation covers that one task only.
 
 ## Pull Requests
 

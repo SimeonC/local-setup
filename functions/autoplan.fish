@@ -1318,13 +1318,26 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     # trailing assignment runs, the caller's 130 check still aborts cleanly
     # instead of crashing on an empty value.
     set -g __autoplan_last_status 130
-    set -g CLR_BLUE "\033[38;2;30;64;160m"
-    set -g CLR_GREEN "\033[38;2;20;96;50m"
-    set -g CLR_ORANGE "\033[38;2;160;80;20m"
-    set -g CLR_RESET "\033[0m"
 
-    printf "${CLR_BLUE}claude${CLR_RESET} [name: ${CLR_GREEN}%s${CLR_RESET}] [agent: ${CLR_GREEN}%s${CLR_RESET}] [permissions: ${CLR_GREEN}%s${CLR_RESET}]" "$_hl_name" "$_hl_agent" "$_hl_perm"
-    printf "       -> ${CLR_ORANGE}%s${CLR_RESET}" "$_hl_prompt"
+    set_color blue
+    printf "claude"
+    set_color normal
+    printf " [name: "
+    set_color green
+    printf "%s" "$_hl_name"
+    set_color normal
+    printf "] [agent: "
+    set_color green
+    printf "%s" "$_hl_agent"
+    set_color normal
+    printf "] [permissions: "
+    set_color green
+    printf "%s" "$_hl_perm"
+    set_color normal
+    printf "]\n       -> "
+    set_color cyan
+    printf "$_hl_prompt\n"
+    set_color normal
     env -C $_hl_cwd claude -p --output-format stream-json --verbose \
         --session-id $__autoplan_last_uuid --name $_hl_name \
         --permission-mode $_hl_perm --agent $_hl_agent \
