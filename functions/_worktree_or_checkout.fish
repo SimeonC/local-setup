@@ -21,8 +21,11 @@ function _worktree_or_checkout --description 'Leave CWD at the working location 
     # --- 1. Best-effort fetch ---------------------------------------------
     git fetch origin $head 2>/dev/null
 
-    # --- 2. Already on the head branch ------------------------------------
-    set -l current (git branch --show-current)
+    # --- 2. Already on the head branch --------------------------------
+    # Compare by origin name, not the raw local name: a local branch like
+    # `theme/details-styling-refactor` tracking `origin/details-styling-refactor`
+    # IS the `details-styling-refactor` branch, so no prompt/worktree is needed.
+    set -l current (_current_origin_branch)
     if test "$current" = "$head"
         echo "📥 On branch '$head' — syncing..."
         if not git merge --ff-only @{u} 2>/dev/null

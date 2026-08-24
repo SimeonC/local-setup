@@ -40,7 +40,9 @@ function semclaude --description 'Gather failing Semaphore CI context and launch
         # Target the remote branch tip: `gh api .../commits/<branch>/status`
         # resolves the ref server-side, so unpushed local commits are ignored
         # and no fetch is needed.
-        set -l branch (git branch --show-current)
+        # The current branch as origin knows it — a local `theme/x` branch
+        # tracking `origin/x` is `x`.
+        set -l branch (_current_origin_branch)
         if test -z "$branch"
             # Detached HEAD (e.g. a `--detach` worktree): fall back to the PR head.
             set branch (gh pr view --json headRefName -q .headRefName 2>/dev/null)
