@@ -33,14 +33,20 @@ This file is symlinked from `~/.config/fish/claude/`. Always edit it there, not 
 
 ## Delegation and agent spawning
 
-- The lead's context window is scarce: delegate broad reading, searching, research, and self-contained implementation to agents; retain only distilled conclusions, paths, line references, and decisions. Do not accumulate raw file dumps or broad search output.
-- **Multi-step or broad tasks go through my delegation workflow, not ad-hoc fan-out.** When orchestration is triggered — "ultracode", "use a workflow", or a task needing 2+ agents — run `Workflow({ scriptPath: "~/.claude/workflows/delegate.mjs", args: {...} })`. Never author a throwaway workflow script for this; `delegate.mjs` already encodes the policy (roles, one task per agent, concurrency cap 3, no worktrees for coding, distilled returns). Extend that file if it doesn't fit.
+- **Do not parallelize work, use `Workflow`, spawn teammates, or invoke agents unless I explicitly request it in the current prompt.** This prohibition overrides all other delegation guidance, including suggestions to delegate broad reading, implementation, reviews, commits, or multi-step work.
+- When I explicitly authorize agents or parallelization, use the delegation workflow rather than ad-hoc fan-out for multi-agent work: `Workflow({ scriptPath: "~/.claude/workflows/delegate.mjs", args: {...} })`. Never author a throwaway workflow script; `delegate.mjs` already encodes the policy (roles, one task per agent, concurrency cap 3, no worktrees for coding, distilled returns). Extend that file if it doesn't fit.
 - `args` shape: `{ task, explore: [{name, prompt, isolate?}], implement: [{name, prompt, role?}], review?: true|string }`. Roles are `explore | implement | hard | plan | review | commit`.
 - **Never pass `model` to `Agent` or `agent()`.** It is a closed enum and bypasses the configured gateway model. `subagent_type`/`agentType` is a role, never a model ID. Models come only from `~/.claude/agents/*.md` frontmatter. If the configured model is unavailable, report the failure rather than substituting one. Never put model IDs, `${VAR}`, `$VAR`, or `env:VAR` in agent prompts or frontmatter — setup bakes the tier in, and the registry loads at session start.
-- When spawning `Agent` directly anyway (single scoped task, no workflow), it must still be a **named** teammate — a nameless/standalone spawn silently falls back to the session model.
-- Be patient with team members, SPARK errors are temporary and will go away after a while - confirm with the user before killing/restarting any "failed" team member. It may just be slow.
-- Invoke `tdd` when implementing code changes (not while planning); pass the relevant TDD instructions into implementation-agent prompts. Teammates execute only their assigned scope — they never invoke `tdd` and never spawn their own agents.
-- Always delegate committing to a `custom-committer` teammate; never commit inline.
+- When agents are explicitly authorized and `Agent` is used directly, it must still be a named teammate — a nameless/standalone spawn silently falls back to the session model.
+- Be patient with team members, SPARK errors are temporary and will go away from time to time — confirm with me before killing/restarting any "failed" team member.
+- Invoke `tdd` when implementing code changes (not while planning); pass the relevant TDD instructions into implementation-agent prompts. Teammates execute only their assigned scope — they never invoke `tdd` or spawn their own agents.
+- When I explicitly authorize agent use, delegate committing to a `custom-committer` teammate; never commit inline.
+
+## Parallelization
+
+- Work sequentially by default. Do not use `multi_tool_use.parallel`, concurrent tool calls, background agents, parallel workflows, or other concurrent execution unless I explicitly say to parallelize or authorize agents in the current prompt.
+- "Use agents", "delegate this", "parallelize", "fan out", or "run a workflow" count as explicit authorization only for the requested scope; do not infer ongoing authorization for later turns or unrelated tasks.
+- If a task would benefit from parallelization but I have not authorized it, do it sequentially without asking for permission unless the choice materially changes the result; in that case, ask me first.
 
 ## Worktrees (CRITICAL)
 
