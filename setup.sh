@@ -50,8 +50,15 @@ else
   echo "⚠️  Homebrew unavailable — skipping dependency install. Install deps manually (see README)."
 fi
 
-# Create ~/.claude if it doesn't exist
-mkdir -p ~/.claude
+# Create ~/.claude and ~/.agents if they don't exist
+mkdir -p ~/.claude ~/.agents
+
+# pi: use the same skill source as Claude Code. Preserve a pre-existing
+# pi-managed directory rather than deleting it when converting to the symlink.
+if [ -e ~/.agents/skills ] && [ ! -L ~/.agents/skills ]; then
+  mv ~/.agents/skills ~/.agents/skills.pi-managed-backup
+fi
+ln -sfn "$SCRIPT_DIR/claude/skills" ~/.agents/skills
 
 # Claude Code: CLAUDE.md
 ln -sfn "$SCRIPT_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
@@ -82,6 +89,7 @@ echo "Show hidden dot files by default..."
 defaults write com.apple.finder AppleShowAllFiles -boolean true; killall Finder;
 
 echo "Symlinks created:"
+echo "  ~/.agents/skills -> $SCRIPT_DIR/claude/skills"
 echo "  ~/.claude/CLAUDE.md -> $SCRIPT_DIR/claude/CLAUDE.md"
 echo "  ~/.claude/skills -> $SCRIPT_DIR/claude/skills"
 echo "  ~/.claude/workflows -> $SCRIPT_DIR/claude/workflows"

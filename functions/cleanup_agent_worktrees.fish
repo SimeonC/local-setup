@@ -18,6 +18,10 @@ function cleanup_agent_worktrees --description "Remove agent-* worktrees and the
         echo "Error: current branch '$current_branch' matches agent-*; switch away before cleaning" >&2
         return 1
     end
+    if string match -q 'worktree-agent-*' -- $current_branch
+        echo "Error: current branch '$current_branch' matches agent-*; switch away before cleaning" >&2
+        return 1
+    end
 
     # Collect registered worktrees checked out on local agent-* branches.
     set -l worktree_paths
@@ -29,6 +33,10 @@ function cleanup_agent_worktrees --description "Remove agent-* worktrees and the
         set -l br_match (string match -r '^branch refs/heads/(.+)$' -- $line)
         if test -n "$wt_match"
             if test -n "$cur_path" -a -n "$cur_branch"; and string match -q 'agent-*' -- $cur_branch
+                set -a worktree_paths $cur_path
+                set -a worktree_branches $cur_branch
+            end
+            if test -n "$cur_path" -a -n "$cur_branch"; and string match -q 'worktree-agent-*' -- $cur_branch
                 set -a worktree_paths $cur_path
                 set -a worktree_branches $cur_branch
             end

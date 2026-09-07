@@ -1,0 +1,33 @@
+language js
+
+function to_kebab_internal($path) js {
+    const s = $path.text;
+    return s.replace(/([a-z])([A-Z])/g, "$1-$2")
+        .replace(/[\s_]+/g, '-')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/gi, '');
+}
+
+predicate to_kebab($value, $path) {
+    $value = to_kebab_internal($path)
+}
+
+function to_pascal_internal($path) js {
+    const s = $path.text;
+    const kebab = s.replace(/([a-z])([A-Z])/g, "$1-$2")
+        .replace(/[\s_]+/g, '-')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/gi, '');
+    return kebab.split('-').map(w => w.substring(0,1).toUpperCase() + w.substring(1)).join('')
+}
+
+predicate to_pascal($value, $path) {
+    $value = to_pascal_internal($path)
+}
+
+pattern within_same_block($target, $predicate) {
+  $target where {
+    $target <: within statement_block() as $s,
+    $s <: $predicate
+  }
+}

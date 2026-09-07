@@ -112,3 +112,23 @@ if not string match -q -- "$PNPM_HOME/bin" $PATH
   set -gx PATH "$PNPM_HOME/bin" $PATH
 end
 # pnpm end
+
+# AI helper aliases. The implementations are backend-neutral *_ai functions;
+# set AI_BACKEND=pi (or claude) at the alias boundary.
+alias pclaude 'set -lx AI_BACKEND claude; p_ai'
+alias ppclaude 'set -lx AI_BACKEND claude; pp_ai'
+alias prclaude 'set -lx AI_BACKEND claude; pr_ai'
+alias semclaude 'set -lx AI_BACKEND claude; sem_ai'
+alias quick_claude 'set -lx AI_BACKEND claude; quick_ai'
+alias print_claude 'set -lx AI_BACKEND claude; print_ai'
+alias danger_claude 'set -lx AI_BACKEND claude; danger_ai'
+
+alias ppi 'set -lx AI_BACKEND pi; p_ai'
+alias pclipboard 'set -lx AI_BACKEND pi; pp_ai'
+alias pr_pi 'set -lx AI_BACKEND pi; pr_ai'
+alias sem_pi 'set -lx AI_BACKEND pi; sem_ai'
+alias quick_pi 'set -lx AI_BACKEND pi; quick_ai'
+alias print_pi 'set -lx AI_BACKEND pi; print_ai'
+alias danger_pi 'set -lx AI_BACKEND pi; danger_ai'
+alias autoplan_pi 'set -lx AI_BACKEND pi; autoplan'
+alias dco_pi 'dco pi'

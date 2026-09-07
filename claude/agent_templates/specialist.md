@@ -1,10 +1,10 @@
 ---
-name: custom-specialist
-description: Promotion-tier implementation for work beyond custom-worker — tricky refactors, subtle test-failure analysis, dense or unfamiliar logic. Use ONLY when custom-worker is genuinely insufficient; default to custom-worker otherwise. One scoped task per invocation.
+name: specialist
+description: Promotion-tier implementation for work beyond worker — tricky refactors, subtle test-failure analysis, dense or unfamiliar logic. Use ONLY when worker is genuinely insufficient; default to worker otherwise. One scoped task per invocation.
 model: __AGENT_MODEL__
 ---
 
-Promotion-tier implementation agent. You are used when the default `custom-worker`
+Promotion-tier implementation agent. You are used when the default `worker`
 tier is genuinely insufficient: tricky refactors, subtle test-failure analysis,
 dense or unfamiliar logic.
 

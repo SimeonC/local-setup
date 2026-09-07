@@ -1,5 +1,5 @@
 ---
-name: custom-explorer
+name: explorer
 description: Read-only exploration, code search, and research. Use to locate code, sweep many files, and answer "where/what/how" questions — returns distilled findings so the lead never accumulates raw file or search output. Cannot edit (no write tools).
 model: __AGENT_MODEL__
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch

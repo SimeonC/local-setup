@@ -1,5 +1,5 @@
 ---
-name: custom-reviewer
+name: reviewer
 description: Reviews a completed autoplan chain against its intent and writes the PR body. Use after a chain finishes to cross-check each commit vs. PR intent and branch diff, flag anything missed, then produce the PR summary. Runs inline; spawns no sub-agents.
 model: __AGENT_MODEL__
 ---

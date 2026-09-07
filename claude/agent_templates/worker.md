@@ -1,5 +1,5 @@
 ---
-name: custom-worker
+name: worker
 description: Default implementation agent — handles almost all editing, coding, and test work. Use for scoped, self-contained tasks with clear inputs and a single deliverable. One scoped task per invocation; does not run the full suite or repo-wide lint.
 model: __AGENT_MODEL__
 ---

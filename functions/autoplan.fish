@@ -400,7 +400,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     --proto-dir "$proto_dir" --proto-url "$proto_url" | string collect --allow-empty)
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan prototype) \
-                    --permission-mode $permission_mode --agent custom-planner \
+                    --permission-mode $permission_mode --agent planner \
                     --append-system-prompt "$prototype_system_prompt" "$proto_sub"
                 set -l _st $__autoplan_last_status
                 __autoplan_prototype_server_stop $srv_pid
@@ -424,7 +424,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             rm -f $__autoplan_root/tmp/autoplan-step-result.txt
             __autoplan_run_headless $plan_cwd \
                 (__autoplan_session_name $current_plan implement) \
-                $permission_mode custom-planner "$implement_system_prompt" "$impl_sub"
+                $permission_mode planner "$implement_system_prompt" "$impl_sub"
             if test $__autoplan_last_status -eq 130
                 echo "⚠️  Implement interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                 return 1
@@ -516,7 +516,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                         __autoplan_run_headless $plan_cwd \
                             (__autoplan_session_name $current_plan fix-test) \
-                            $permission_mode custom-worker "$fix_test_system_prompt" "$fix_prompt"
+                            $permission_mode worker "$fix_test_system_prompt" "$fix_prompt"
                         set cmd_last_fix_uuid $__autoplan_last_uuid
                         if test $__autoplan_last_status -eq 130
                             echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -571,7 +571,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                         __autoplan_run_headless $plan_cwd \
                             (__autoplan_session_name $current_plan fix-test) \
-                            $permission_mode custom-worker "$fix_test_system_prompt" "$fix_prompt"
+                            $permission_mode worker "$fix_test_system_prompt" "$fix_prompt"
                         set mt_last_fix_uuid $__autoplan_last_uuid
                         if test $__autoplan_last_status -eq 130
                             echo "⚠️  Fix interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -611,7 +611,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 __autoplan_run_headless $plan_cwd \
                     (__autoplan_session_name $current_plan harden) \
-                    $permission_mode custom-worker "$harden_system_prompt" "$harden_sub"
+                    $permission_mode worker "$harden_system_prompt" "$harden_sub"
                 set -l _harden_uuid $__autoplan_last_uuid
                 if test $__autoplan_last_status -eq 130
                     echo "⚠️  Harden interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -648,7 +648,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
 
                 __autoplan_claude_headed $plan_cwd \
                     --name (__autoplan_session_name $current_plan verify) \
-                    --permission-mode $permission_mode --agent custom-reviewer \
+                    --permission-mode $permission_mode --agent reviewer \
                     --append-system-prompt "$verify_system_prompt" "$verify_sub"
                 if test $__autoplan_last_status -eq 130
                     echo "⚠️  Verify interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -672,7 +672,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                         fix-verify-prompt.md DOMAIN_FIX_VERIFY fix_verify \
                         "$_pp" $current_plan $branch "$_tc" | string collect --allow-empty)
 
-                    __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --agent custom-worker --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
+                    __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan fix-verify) --permission-mode $permission_mode --agent worker --append-system-prompt "$fix_verify_system_prompt" "/plan $fix_verify_prompt"
                     set -l _st $__autoplan_last_status
                     if __autoplan_step_interrupted $_st; return 1; end
 
@@ -893,11 +893,13 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     (cat "$HOME/.claude/skills/autoplan/references/commit-prompt.md") \
                     $current_plan $branch $snap_test_cmd)
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
-                env -C $plan_cwd claude -p --output-format stream-json --verbose \
+                pushd $plan_cwd
+                __ai_exec -p --output-format stream-json --verbose \
                     --name (__autoplan_session_name $current_plan commit) \
                     --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" \
-                    --agent custom-committer --effort medium "$commit_prompt" | format-claude-stream | tee $_commit_log
+                    --effort medium "$commit_prompt" | format-claude-stream | tee $_commit_log
                 set -l _st $pipestatus[1]
+                popd
                 if test $_st -eq 130
                     echo "⚠️  Step interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
                     return 1
@@ -944,7 +946,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                 | string replace -a -- '$DIFF_BASE' "$__autoplan_diff_base" \
                 | string replace -a -- '$TEAM_NAME' "$team_name")
 
-            __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --agent custom-reviewer --effort medium "$cr_orch"
+            __autoplan_claude_headed $plan_cwd --name (__autoplan_session_name $current_plan chain-review) --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" --agent reviewer --effort medium "$cr_orch"
             set -l _cr_st $__autoplan_last_status
             if test $_cr_st -eq 130
                 echo "⚠️  Chain review interrupted (Ctrl-C). Stopping without advancing state. Resume with: autoplan" >&2
@@ -1262,7 +1264,7 @@ function __autoplan_commit_recover --description "Headed recovery for a failed c
         --name (__autoplan_session_name $_cr_plan commit-recover) \
         --permission-mode $_cr_perm \
         --append-system-prompt "$_cr_base" \
-        --agent custom-specialist \
+        --agent specialist \
         "$_prompt"
 
     if test $__autoplan_last_status -eq 130
@@ -1338,11 +1340,13 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     set_color cyan
     printf "$_hl_prompt\n"
     set_color normal
-    env -C $_hl_cwd claude -p --output-format stream-json --verbose \
+    pushd $_hl_cwd
+    __ai_exec -p --output-format stream-json --verbose \
         --session-id $__autoplan_last_uuid --name $_hl_name \
         --permission-mode $_hl_perm --agent $_hl_agent \
         --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
     set -g __autoplan_last_status $pipestatus[1]
+    popd
 end
 
 function __autoplan_claude_headed --description "Run claude headed via the tmux claude wrapper in a given dir; sets __autoplan_last_status"
@@ -1354,7 +1358,7 @@ function __autoplan_claude_headed --description "Run claude headed via the tmux 
     set -l _ch_args $argv[2..-1]
     # Never inject --model. Callers pass --agent (model from its frontmatter);
     # anything without an agent falls back to the user's own configured default.
-    claude $_ch_args
+    __ai_run $_ch_args
     set -g __autoplan_last_status $status
     popd
 end

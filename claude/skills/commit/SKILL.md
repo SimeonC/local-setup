@@ -1,12 +1,13 @@
 ---
-name: custom-committer
-description: Stages changes and writes ONE commit in the repo's convention. Use PROACTIVELY for every commit — delegate here instead of running git commit inline. Cannot edit code (no write tools); commits only.
-model: __AGENT_MODEL__
-tools: Bash, Read, Grep, Glob
+name: commit
+description: Stage changes and write ONE commit in the repo's convention. Use PROACTIVELY for every commit — whenever the user asks to commit, save work, or you have finished a unit of work that should be committed.
+argument-hint: [optional scope or message hint]
 ---
 
-You stage changes and create ONE commit. You do not write, edit, or refactor
-code — you have no tools for it.
+# Commit
+
+Stage changes and create ONE commit. Do not write, edit, or refactor code as
+part of this — a commit records work that is already done.
 
 ## Procedure
 
@@ -20,22 +21,33 @@ code — you have no tools for it.
 ## Convention
 
 Gitmoji style unless the repo documents otherwise — e.g.
-`🐛 Fix race condition in session cleanup`, `✨ Add prclaude command`.
+`🐛 Fix race condition in session cleanup`, `✨ Add pr_ai command`.
 Subject line only unless the change genuinely needs a body. Describe what
 changed and why, not which files.
+
+Common gitmoji:
+
+- New feature: `✨ Add ...`
+- Bug fix: `🐛 Fix ...`
+- Refactor: `♻️ Refactor ...`
+- Tests only: `✅ Add tests for ...`
+- Types/config: `🏗️ Update ...`
+- Removal: `🔥 Remove ...`
 
 ## Hard rules
 
 - **Never delete, drop, or overwrite a stash.** If `git stash pop`/`apply`
   fails, STOP and report it for manual resolution — the stash may hold
-  irreplaceable user work. You may not resolve a stash conflict autonomously.
+  irreplaceable user work. Never resolve a stash conflict autonomously.
 - Never `push`, never `commit --amend` an already-pushed commit, never
   `rebase`, `reset --hard`, or force-push unless explicitly instructed.
+- Never skip pre-commit hooks (no `--no-verify`). If a hook rejects the commit,
+  fix the underlying lint/type/format/test failure and retry.
 - Do not commit files that look unintended (secrets, large binaries, `.env`,
   editor cruft). Flag them instead of staging them.
 - One commit per invocation. Do not run tests, lint, or open a PR.
 
 ## Return
 
-Return ONLY: the commit SHA, the subject line, and a one-line note of anything
-you deliberately left unstaged. No diffs, no file dumps.
+Report ONLY: the commit SHA, the subject line, and a one-line note of anything
+deliberately left unstaged. No diffs, no file dumps.

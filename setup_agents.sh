@@ -9,11 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATE_DIR="$SCRIPT_DIR/claude/agent_templates"
 DEST_DIR="$HOME/.claude/agents"
 
-CUSTOM_TEMPLATES=(
-  custom-committer custom-explorer custom-planner custom-reviewer
-  custom-specialist custom-worker
-)
-FALLBACK_AGENTS=(anthropic-explorer anthropic-worker anthropic-committer)
+TEMPLATES=(explorer planner reviewer specialist worker)
 
 curated_models() {
   printf '%s\n' \
@@ -83,17 +79,11 @@ else
   echo "Using models discovered from ${ANTHROPIC_BASE_URL%/}/v1/models." >&2
 fi
 
-CUSTOM_MODELS=()
-for agent in "${CUSTOM_TEMPLATES[@]}"; do
+MODEL_CHOICES=()
+for agent in "${TEMPLATES[@]}"; do
   model="$(select_model "$agent" "$(agent_description "$agent")")"
   [ -n "$model" ] || { echo "error: no model selected for $agent" >&2; exit 1; }
-  CUSTOM_MODELS+=("$model")
-done
-FALLBACK_MODELS=()
-for agent in "${FALLBACK_AGENTS[@]}"; do
-  model="$(select_model "$agent" "$(agent_description "custom-${agent#anthropic-}")")"
-  [ -n "$model" ] || { echo "error: no model selected for $agent" >&2; exit 1; }
-  FALLBACK_MODELS+=("$model")
+  MODEL_CHOICES+=("$model")
 done
 
 if [ ! -d "$TEMPLATE_DIR" ]; then
@@ -105,7 +95,9 @@ if [ -L "$DEST_DIR" ]; then
   rm "$DEST_DIR"
 fi
 mkdir -p "$DEST_DIR"
-rm -f "$DEST_DIR"/{Explore,general-purpose,Plan,explorer,worker,committer,specialist}.md
+# Wipe and regenerate: clears every previously generated agent, including the
+# retired custom-* / anthropic-* sets. Keep hand-written agents elsewhere.
+rm -f "$DEST_DIR"/*.md
 
 # Escape replacement text so arbitrary model IDs remain exact in sed output.
 sed_replacement() {
@@ -113,21 +105,17 @@ sed_replacement() {
 }
 
 generate_from() {
-  local src="$1" name="$2" model="$3" replacement
+  local name="$1" model="$2" replacement
   replacement="$(sed_replacement "$model")"
   sed -e "s|__AGENT_MODEL__|$replacement|g" \
       -e "s|__DEFAULT_HIGH_MODEL__|$replacement|g" \
       -e "s|__DEFAULT_LOW_MODEL__|$replacement|g" \
       -e "s|__DEFAULT_MODEL__|$replacement|g" \
       -e "s|^name: .*|name: $name|" \
-      "$TEMPLATE_DIR/$src.md" > "$DEST_DIR/$name.md"
+      "$TEMPLATE_DIR/$name.md" > "$DEST_DIR/$name.md"
 }
 
-for i in "${!CUSTOM_TEMPLATES[@]}"; do
-  generate_from "${CUSTOM_TEMPLATES[$i]}" "${CUSTOM_TEMPLATES[$i]}" "${CUSTOM_MODELS[$i]}"
-done
-for i in "${!FALLBACK_AGENTS[@]}"; do
-  agent="${FALLBACK_AGENTS[$i]}"
-  generate_from "custom-${agent#anthropic-}" "$agent" "${FALLBACK_MODELS[$i]}"
+for i in "${!TEMPLATES[@]}"; do
+  generate_from "${TEMPLATES[$i]}" "${MODEL_CHOICES[$i]}"
 done
 exit 0

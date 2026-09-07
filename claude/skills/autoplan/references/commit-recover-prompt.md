@@ -20,12 +20,8 @@ Run `git add -A` to stage ALL changes in the repo (do NOT cherry-pick files — 
 
 If `$COMMIT_MSG` is non-empty, use it as the commit message.
 
-If `$COMMIT_MSG` is empty, author a gitmoji message. Gitmoji conventions:
-- New feature: `✨ Add ...`
-- Bug fix: `🐛 Fix ...`
-- Refactor: `♻️ Refactor ...`
-- Tests only: `✅ Add tests for ...`
-- Types/config: `🏗️ Update ...`
+If `$COMMIT_MSG` is empty, author a gitmoji message — see the `commit` skill for
+the conventions and git safety rules.
 
 The commit message should be a short summary of what changed and why — reference the plan at `$PLAN_FILE` for context.
 

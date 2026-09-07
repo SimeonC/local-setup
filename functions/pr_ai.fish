@@ -1,9 +1,9 @@
-function prclaude --description 'Feed unresolved PR review threads into a Claude /plan session'
+function pr_ai --description 'Feed unresolved PR review threads into a Claude /plan session'
     # --- 0. Refuse to nest inside an existing Claude Code session ----------
-    # prclaude launches an interactive `claude` /plan session; nesting it inside
+    # pr_ai launches an interactive `claude` /plan session; nesting it inside
     # Claude Code routes through the stream-json wrapper and crashes on exit.
     if set -q CLAUDECODE
-        echo "❌ prclaude launches an interactive Claude /plan session, which can't nest inside an existing Claude Code session." >&2
+        echo "❌ pr_ai launches an interactive Claude /plan session, which can't nest inside an existing Claude Code session." >&2
         echo "   Open a plain terminal and run it there." >&2
         return 1
     end
@@ -25,7 +25,7 @@ function prclaude --description 'Feed unresolved PR review threads into a Claude
 
     # --- 2. Resolve the PR URL ---------------------------------------------
     if test (count $argv) -gt 1
-        echo "❌ Usage: prclaude [pr-url]" >&2
+        echo "❌ Usage: pr_ai [pr-url]" >&2
         return 1
     end
 
@@ -40,7 +40,7 @@ function prclaude --description 'Feed unresolved PR review threads into a Claude
         set pr_url (gh pr view --json url -q .url 2>/dev/null)
         set detected 1
         if test -z "$pr_url"
-            echo "❌ No PR found for the current branch. Pass a PR URL: prclaude <pr-url>" >&2
+            echo "❌ No PR found for the current branch. Pass a PR URL: pr_ai <pr-url>" >&2
             return 1
         end
     end
@@ -115,7 +115,7 @@ function prclaude --description 'Feed unresolved PR review threads into a Claude
     echo "$threads_markdown" > "pr-review-comments.txt"
 
     # --- 6. Launch Claude in /plan mode ------------------------------------
-    claude "/plan Resolve the following unresolved review comments on PR $pr_url.
+    __ai_run "/plan Resolve the following unresolved review comments on PR $pr_url.
 For each thread, address the reviewer's concern in code (or explain why no change is needed).
 All comments are in ./pr-review-comments.txt delete the file once all addressed."
 end
