@@ -115,7 +115,9 @@ function pr_ai --description 'Feed unresolved PR review threads into a Claude /p
     echo "$threads_markdown" > "pr-review-comments.txt"
 
     # --- 6. Launch Claude in /plan mode ------------------------------------
-    __ai_run "/plan Resolve the following unresolved review comments on PR $pr_url.
+    __ai_run "Resolve the following unresolved review comments on PR $pr_url.
 For each thread, address the reviewer's concern in code (or explain why no change is needed).
-All comments are in ./pr-review-comments.txt delete the file once all addressed."
+All comments are in ./pr-review-comments.txt delete the file once all addressed.
+I need you to break down the why and where of each issue and why our proposed solution fixes it.
+Confirm this breakdown with me before continuing."
 end

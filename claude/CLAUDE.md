@@ -11,4 +11,5 @@
 
 - **NEVER delete a stash if it fails to restore.** If `git stash pop` or `git stash apply` fails, STOP and have the user resolve it manually — the stash likely holds irreplaceable work. Applies to every agent; none may resolve a stash conflict autonomously.
 - **NEVER use worktrees for sub-agents** It is almost NEVER the correct way to use sub-agents. NEVER use isolation unless specifically asked for.
-- **DON'T use agents, sub-agents, teams** - only when it makes sense and asked to, by default just work in the main thread.
+- **Always use defined agents and their frontmatter models instead of the defaults**
+

@@ -34,7 +34,27 @@ function claude --wraps=claude --description 'Coding agent with tmux session man
         # Pass command directly to new-session (not send-keys) so it's never typed
         # into an interactive shell and never recorded in history.
         # fish --private disables history for the session; tmux exits when claude exits.
-        tmux new-session -d -s $sess_name -x (tput cols) -y (tput lines) \
+        # tmux sessions inherit the SERVER's environment (captured from whichever
+        # terminal first started tmux), not this shell's — so terminal-specific
+        # identity vars (ORCA_*, CMUX_*, ...) leak into panes belonging to other
+        # terminals. Make the session env match THIS shell: pass every var through
+        # with -e, and clear vars that exist only in the server's env.
+        set -l tmux_env_args
+        set -l client_vars
+        for kv in (env -0 | string split0)
+            set -l name (string split -m 1 = $kv)[1]
+            if string match -qr '^[A-Za-z_][A-Za-z0-9_]*$' -- $name
+                set -a tmux_env_args -e $kv
+                set -a client_vars $name
+            end
+        end
+        for kv in (tmux show-environment -g 2>/dev/null | string match -r '^[A-Za-z_][A-Za-z0-9_]*=')
+            set -l name (string split -m 1 = $kv)[1]
+            if not contains -- $name $client_vars
+                set -a tmux_env_args -e "$name="
+            end
+        end
+        tmux new-session -d -s $sess_name $tmux_env_args -x (tput cols) -y (tput lines) \
             fish --private -c "source $tmpscript; rm $tmpscript"
         tmux set-option -wt $sess_name automatic-rename off
         tmux rename-window -t $sess_name "$short_cwd"

@@ -338,7 +338,9 @@ function sem_ai --description 'Gather failing Semaphore CI context and launch a 
     if test -n "$pr_number"; and test "$pr_number" != null
         set pr_note " (PR #$pr_number)"
     end
-    __ai_run "/plan Fix the failing Semaphore CI checks on branch $head$pr_note.
+    __ai_run "Fix the failing Semaphore CI checks on branch $head$pr_note.
 Start with ./ci-failures/README.md — it indexes one extract file per failing job, plus how to inspect the changes.
-Diagnose each failure, fix in code, and explain. Delete the ./ci-failures/ directory once all addressed."
+Delete the ./ci-failures/ directory once all addressed.
+I need you to breakdown the why and where of each failure issue and why our proposed solution fixes it.
+Confirm this breakdown with me before continuing."
 end

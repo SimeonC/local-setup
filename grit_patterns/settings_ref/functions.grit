@@ -25,6 +25,16 @@ predicate to_pascal($value, $path) {
     $value = to_pascal_internal($path)
 }
 
+function concatenate_interna($text1, $text2) js {
+    const t1 = $text1.text;
+    const t2 = $text2.text;
+    return t1 + t2
+}
+
+predicate to_pascal($text1, $text2) {
+    $text1 = concatenate_internal($text1, $text2)
+}
+
 pattern within_same_block($target, $predicate) {
   $target where {
     $target <: within statement_block() as $s,
