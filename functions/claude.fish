@@ -1,5 +1,5 @@
 function claude --wraps=claude --description 'Coding agent with tmux session management (Claude or pi)'
-    open "kaleidoscope://changeset?path=$PWD"
+    open --background "kaleidoscope://changeset?path=$PWD"
 
     # Set AI_BACKEND=pi to run every Claude-oriented helper through pi.
     # Keeping this dispatch here makes pclaude, autoplan, prclaude, etc. DRY.

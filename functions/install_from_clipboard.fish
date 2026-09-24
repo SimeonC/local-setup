@@ -1,6 +1,7 @@
 function install_from_clipboard
+    set -l install_args $argv
     set -l legacy_peer_deps_flag
-    if contains -- '--legacy-peer-deps' $argv
+    if contains -- '--legacy-peer-deps' $install_args
         set legacy_peer_deps_flag '--legacy-peer-deps'
     end
     set dir (pwd)
@@ -65,17 +66,17 @@ function install_from_clipboard
         echo Installing dependencies: $dep_pkgs
         # --legacy-peer-deps is npm-only; use _pm_run for pnpm/bun
         if test "$pm" = npm; and test -n "$legacy_peer_deps_flag"
-            npm install $legacy_peer_deps_flag $dep_pkgs
+            npm install $install_args $dep_pkgs
         else
-            _pm_run i $dep_pkgs
+            _pm_run i $install_args $dep_pkgs
         end
     end
     if test (count $dev_pkgs) -gt 0
         echo Installing devDependencies: $dev_pkgs
         if test "$pm" = npm; and test -n "$legacy_peer_deps_flag"
-            npm install --save-dev $legacy_peer_deps_flag $dev_pkgs
+            npm install --save-dev $install_args $dev_pkgs
         else
-            _pm_run i -D $dev_pkgs
+            _pm_run i -D $install_args $dev_pkgs
         end
     end
 end

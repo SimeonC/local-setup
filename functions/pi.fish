@@ -1,5 +1,5 @@
 function pi --wraps pi --description "pi, with Anthropic-direct credentials stripped so only Pantheon-sourced models appear"
-    open "kaleidoscope://changeset?path=$PWD"
+    open --background "kaleidoscope://changeset?path=$PWD"
     # Use `AI_BACKEND=pi claude ...` or one of the *_pi helpers for shared flows.
     # secure_env.fish exports ANTHROPIC_AUTH_TOKEN/ANTHROPIC_BASE_URL for Claude Code.
     # pi treats those as auth for its built-in `anthropic` provider, which makes all 13

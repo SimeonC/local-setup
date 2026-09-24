@@ -227,7 +227,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
             echo "Error: cwd '$plan_cwd_raw' not found for plan $current_plan" >&2
             return 1
         end
-        open "kaleidoscope://changeset?path=$plan_cwd"
+        open --background "kaleidoscope://changeset?path=$plan_cwd"
         __autoplan_activate_tools $plan_cwd
 
         # Re-read branch per plan

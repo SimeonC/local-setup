@@ -73,7 +73,7 @@ alias record "replayio record"
 alias dclaude danger_claude
 alias cclaude 'claude --continue'
 alias qclaude quick_claude
-alias kwatch 'open "kaleidoscope://changeset?path=$PWD"'
+alias kwatch 'open --background "kaleidoscope://changeset?path=$PWD"'
 alias tower 'gittower .'
 
 function npm --wraps npm
