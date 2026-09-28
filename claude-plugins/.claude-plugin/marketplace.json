@@ -1,0 +1,16 @@
+{
+  "name": "local-claude-plugins",
+  "owner": {
+    "name": "Local user"
+  },
+  "metadata": {
+    "description": "Private, machine-local Claude Code plugins."
+  },
+  "plugins": [
+    {
+      "name": "peer",
+      "source": "./peer-programming",
+      "description": "Local-only peer programming guardrails and review workflow."
+    }
+  ]
+}

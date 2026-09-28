@@ -1,0 +1,9 @@
+{
+  "name": "peer",
+  "version": "0.1.0",
+  "description": "Local teacher-and-reviewer peer programming mode with deterministic tests.",
+  "author": {
+    "name": "Local user"
+  },
+  "types": "./types/index.d.ts"
+}

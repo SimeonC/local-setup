@@ -91,7 +91,16 @@ After installing Talon main, checkout these repositories and configure;
 
 ### Run setup script
 
-Creates symlinks for Claude Code config (`CLAUDE.md`, `skills/`, `hooks/*`) and grit patterns.
+Creates symlinks for Claude Code config (`CLAUDE.md`, `skills/`, `hooks/*`), the local peer-programming plugin catalog, and grit patterns. The peer plugin source is tracked in `claude-plugins/peer-programming`; setup creates a dev-mod symlink at `~/.claude/dev-mods/4edef55f-ceee-4925-8001-a069491fb871/peer-programming` pointing to it for hot-reload. The plugin is loaded only for `peer` sessions; setup does not install or enable it globally.
+
+Optional persistent activation (not performed by setup):
+
+```sh
+claude plugin marketplace add ~/.config/fish/claude-plugins
+claude plugin install peer@local-claude-plugins
+```
+
+Do not load the installed copy and the same plugin through `--plugin-dir` in one session.
 
 ```sh
 ./setup.sh

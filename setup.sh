@@ -81,6 +81,34 @@ for hook in "$SCRIPT_DIR"/claude/hooks/*; do
   ln -sfn "$hook" ~/.claude/hooks/"$(basename "$hook")"
 done
 
+# Claude Code: peer-programming plugin dev-mod symlink.
+# The canonical source is in this repo at claude-plugins/peer-programming.
+# Create or refresh a symlink in ~/.claude/dev-mods pointing to it for hot-reload.
+# Leave a pre-existing real directory untouched with a warning.
+PEER_PLUGIN_SRC="$SCRIPT_DIR/claude-plugins/peer-programming"
+PEER_PLUGIN_LINK="$HOME/.claude/dev-mods/4edef55f-ceee-4925-8001-a069491fb871/peer-programming"
+if [ -d "$PEER_PLUGIN_SRC" ]; then
+  mkdir -p "$(dirname "$PEER_PLUGIN_LINK")"
+  if [ -L "$PEER_PLUGIN_LINK" ] || [ ! -e "$PEER_PLUGIN_LINK" ]; then
+    ln -sfn "$PEER_PLUGIN_SRC" "$PEER_PLUGIN_LINK"
+  else
+    echo "  ⚠️  $PEER_PLUGIN_LINK exists and is not a symlink — leaving it untouched"
+  fi
+else
+  echo "  ⚠️  Peer plugin source is missing at $PEER_PLUGIN_SRC — skipping dev-mod symlink"
+fi
+
+# If this repository is not already ~/.config/fish, expose the entire local
+# marketplace there without replacing a pre-existing real directory.
+FISH_PLUGIN_CATALOG="$HOME/.config/fish/claude-plugins"
+if [ "$SCRIPT_DIR/claude-plugins" != "$FISH_PLUGIN_CATALOG" ]; then
+  if [ -L "$FISH_PLUGIN_CATALOG" ] || [ ! -e "$FISH_PLUGIN_CATALOG" ]; then
+    ln -sfn "$SCRIPT_DIR/claude-plugins" "$FISH_PLUGIN_CATALOG"
+  else
+    echo "  ⚠️  $FISH_PLUGIN_CATALOG exists and is not a symlink — leaving it untouched"
+  fi
+fi
+
 # Grit patterns
 mkdir -p ~/.grit
 ln -sfn "$SCRIPT_DIR/grit_patterns" ~/.grit/patterns
