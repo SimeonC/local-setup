@@ -7,7 +7,7 @@ const WATCH_EXTS = /\.(?:[cm]?[jt]sx?|rb|go|exs?|swift)$/i
 const RUNNER = 'runner.mjs'
 const MAX_FINDINGS = 20
 
-const TEACHER_CONTEXT = `Peer-programming mode is active. Do not implement or edit source files: guide the person through one small learnable step, offer concise hints, and review changes they make. Test files are the exception: agents may author or update tests automatically; never ask the person to write tests. Adapt explanations to their stated experience and preferred analogies. Explain review findings with evidence, cause, and one focused next step. Watcher findings are queued context, not an interrupt or a submitted prompt.`
+const TEACHER_CONTEXT = `Peer-programming mode is active. Do not implement or edit source files: guide the person through one small learnable step, offer concise hints, and review changes they make. Test files are the exception and are your responsibility: proactively write and update them yourself, TDD-style — prefer a failing test first that defines the next step and directs the person's implementation — and never ask the person to write tests. The watcher follows the files you touch automatically; you need not manage its scope by hand. Adapt explanations to their stated experience and preferred analogies. Explain review findings with evidence, cause, and one focused next step. Watcher findings are queued context, not an interrupt or a submitted prompt.`
 
 const REVIEWER_PROMPT = `You are the peer-programming background reviewer and test author. The task prompt contains only this change batch's changed source files, deterministic test candidates, and deterministic test output. Read only those supplied files. Review source changes for correctness, regressions, and edge cases; explain each finding with file and line evidence, cause, and a focused next step that helps the learner understand the change. You may create or update only conventionally named test files listed as candidates in the batch. Never edit implementation/source files, never run shell commands, never choose test commands or paths, and never ask the user to write tests. Keep findings concise; say explicitly when there are no actionable findings.`
 
@@ -272,20 +272,46 @@ const startWatcher = async ($: Dollar, root: string, scope: string, sessionId: s
   })()
 }
 
-const runScopeTool = async ($: Dollar, path: string): Promise<Record<string, unknown>> => {
-  const { value } = await readState($)
-  if (!value) return { error: 'peer session state is not initialized' }
-  if (!path.trim()) return { projectRoot: value.projectRoot, watchRoot: value.watchRoot }
-  const candidate = lexicalPath(path, value.projectRoot)
-  if (!candidate || !inside(candidate, value.projectRoot)) return { error: 'watch scope must remain inside the project root' }
-  const stat = await $.fs.stat(candidate, { resolve: true }).catch(() => undefined)
-  if (!stat?.realPath || !inside(stat.realPath, value.projectRoot) || stat.kind !== 'dir') return { error: 'watch scope must resolve to an existing directory inside the project root' }
-  if (!value.controlFile) return { error: 'watcher control channel is unavailable' }
+/**
+ * Move the watcher to `dirAbs` (an existing directory already known to be inside
+ * the project root). Writes a `set_scope` control message and records the new
+ * watch root. A no-op when the scope is already there. Returns the applied root,
+ * or undefined when there is no control channel yet.
+ */
+const applyWatchScope = async ($: Dollar, value: PeerState, dirAbs: string): Promise<string | undefined> => {
+  if (!value.controlFile) return undefined
+  if (value.watchRoot === dirAbs) return dirAbs
+  const root = value.projectRoot.replace(/\/$/, '')
+  const scope = dirAbs === value.projectRoot ? '.' : dirAbs.slice(root.length + 1)
   const current = await $.fs.read(value.controlFile).catch(() => '')
   const controlLog = typeof current === 'string' ? current : ''
-  await $.fs.write(value.controlFile, `${controlLog}${JSON.stringify({ v: 1, id: `scope-${Date.now()}`, op: 'set_scope', scope: path })}\n`)
-  await changeState($, state => ({ ...state, watchRoot: stat.realPath! }))
-  return { projectRoot: value.projectRoot, watchRoot: stat.realPath }
+  await $.fs.write(value.controlFile, `${controlLog}${JSON.stringify({ v: 1, id: `scope-${Date.now()}`, op: 'set_scope', scope })}\n`)
+  await changeState($, state => ({ ...state, watchRoot: dirAbs }))
+  return dirAbs
+}
+
+/** Follow foreground work: point the watcher at the directory of the edited file. */
+const autoScopeToFile = async ($: Dollar, value: PeerState | undefined, fileAbs: string | undefined): Promise<void> => {
+  if (!value || !fileAbs || !value.controlFile) return
+  const cut = fileAbs.lastIndexOf('/')
+  const dir = cut <= value.projectRoot.replace(/\/$/, '').length ? value.projectRoot : fileAbs.slice(0, cut)
+  if (!inside(dir, value.projectRoot)) return
+  await applyWatchScope($, value, dir).catch(() => undefined)
+}
+
+// The MCP result of a plugin tool must be a string, content blocks, or nothing —
+// never a bare object — so the scope tool reports its outcome as text.
+const runScopeTool = async ($: Dollar, path: string): Promise<string> => {
+  const { value } = await readState($)
+  if (!value) return 'Error: peer session state is not initialized.'
+  if (!path.trim()) return `Watch scope: ${value.watchRoot}\nProject root: ${value.projectRoot}`
+  const candidate = lexicalPath(path, value.projectRoot)
+  if (!candidate || !inside(candidate, value.projectRoot)) return 'Error: watch scope must remain inside the project root.'
+  const stat = await $.fs.stat(candidate, { resolve: true }).catch(() => undefined)
+  if (!stat?.realPath || !inside(stat.realPath, value.projectRoot) || stat.kind !== 'dir') return 'Error: watch scope must resolve to an existing directory inside the project root.'
+  if (!value.controlFile) return 'Error: watcher control channel is unavailable.'
+  await applyWatchScope($, value, stat.realPath)
+  return `Watch scope: ${stat.realPath}\nProject root: ${value.projectRoot}`
 }
 
 export const register: Register = on => {
@@ -353,7 +379,7 @@ export const register: Register = on => {
   on('agent.offer', { agent: 'peer:reviewer' }, () => ({ isOffered: false }))
 
   on('tool.call', { tool: 'mcp__peer__set_scope' }, async ($, e) => {
-    if (typeof e.path !== 'string') return { result: { error: 'path must be a string; an empty path shows the current scope' } }
+    if (typeof e.path !== 'string') return { result: 'Error: path must be a string; pass an empty string to show the current scope.' }
     return { result: await runScopeTool($, e.path) }
   })
 
@@ -387,6 +413,8 @@ export const register: Register = on => {
       const candidates = batch ? [...batch.testCandidates, ...batch.tests] : []
       const allowed = batch && target && candidates.some(path => lexicalPath(path, value.projectRoot) === target)
       if (!batch || batchId === 'starting' || !target || !isTestFile(target) || !allowed) return { deny: 'peer reviewer writes are limited to test candidates in its assigned deterministic change batch.' }
+    } else if (target && WATCH_EXTS.test(target)) {
+      await autoScopeToFile($, value, target)
     }
     return next(e)
   })
@@ -403,6 +431,8 @@ export const register: Register = on => {
       const candidates = batch ? [...batch.testCandidates, ...batch.tests] : []
       const allowed = batch && target && candidates.some(path => lexicalPath(path, value.projectRoot) === target)
       if (!batch || batchId === 'starting' || !target || !isTestFile(target) || !allowed) return { deny: 'peer reviewer writes are limited to test candidates in its assigned deterministic change batch.' }
+    } else if (target && WATCH_EXTS.test(target)) {
+      await autoScopeToFile($, value, target)
     }
     return next(e)
   })
