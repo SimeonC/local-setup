@@ -894,7 +894,7 @@ function autoplan --description "Iterative TDD loop driven by a linked list of m
                     $current_plan $branch $snap_test_cmd)
                 rm -f $__autoplan_root/tmp/autoplan-step-result.txt
                 pushd $plan_cwd
-                __ai_exec -p --output-format stream-json --verbose \
+                command claude -p --output-format stream-json --verbose \
                     --name (__autoplan_session_name $current_plan commit) \
                     --permission-mode $permission_mode --append-system-prompt "$base_system_prompt" \
                     --effort medium "$commit_prompt" | format-claude-stream | tee $_commit_log
@@ -1341,7 +1341,7 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     printf "$_hl_prompt\n"
     set_color normal
     pushd $_hl_cwd
-    __ai_exec -p --output-format stream-json --verbose \
+    command claude -p --output-format stream-json --verbose \
         --session-id $__autoplan_last_uuid --name $_hl_name \
         --permission-mode $_hl_perm --agent $_hl_agent \
         --append-system-prompt "$_hl_sys" "$_hl_prompt" | format-claude-stream
@@ -1349,7 +1349,7 @@ function __autoplan_run_headless --description "Run headless step with pre-assig
     popd
 end
 
-function __autoplan_claude_headed --description "Run claude headed via the tmux claude wrapper in a given dir; sets __autoplan_last_status"
+function __autoplan_claude_headed --description "Run claude headed in a given dir; sets __autoplan_last_status"
     set -l _ch_dir $argv[1]
     # Default to interrupted (130) so rapid Ctrl-C that interrupts fish before
     # the trailing assignment leaves a valid status for the caller's 130 check.
@@ -1358,7 +1358,7 @@ function __autoplan_claude_headed --description "Run claude headed via the tmux 
     set -l _ch_args $argv[2..-1]
     # Never inject --model. Callers pass --agent (model from its frontmatter);
     # anything without an agent falls back to the user's own configured default.
-    __ai_run $_ch_args
+    claude $_ch_args
     set -g __autoplan_last_status $status
     popd
 end

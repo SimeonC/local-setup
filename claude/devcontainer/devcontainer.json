@@ -30,8 +30,6 @@
     "source=${localEnv:HOME}/.ssh,target=/tmp/host-ssh,type=bind,readonly",
     // SSH agent socket — requires `colima start --ssh-agent` (or Docker Desktop)
     "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind",
-    // Tmux config
-    "source=${localEnv:HOME}/.tmux.conf,target=/home/dev/.tmux.conf,type=bind,readonly",
     // AWS credentials for CodeArtifact / other AWS access
     "source=${localEnv:HOME}/.aws,target=/home/dev/.aws,type=bind,readonly",
     // GitHub CLI auth config

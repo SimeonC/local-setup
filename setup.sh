@@ -53,10 +53,10 @@ fi
 # Create ~/.claude and ~/.agents if they don't exist
 mkdir -p ~/.claude ~/.agents
 
-# pi: use the same skill source as Claude Code. Preserve a pre-existing
-# pi-managed directory rather than deleting it when converting to the symlink.
+# ~/.agents/skills: use the same skill source as Claude Code. Preserve a
+# pre-existing real directory rather than deleting it when converting to the symlink.
 if [ -e ~/.agents/skills ] && [ ! -L ~/.agents/skills ]; then
-  mv ~/.agents/skills ~/.agents/skills.pi-managed-backup
+  mv ~/.agents/skills ~/.agents/skills.backup
 fi
 ln -sfn "$SCRIPT_DIR/claude/skills" ~/.agents/skills
 

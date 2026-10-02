@@ -1,14 +1,14 @@
-function sem_ai --description 'Gather failing Semaphore CI context and launch a Claude /plan CI-fix session'
+function semclaude --description 'Gather failing Semaphore CI context and launch a Claude /plan CI-fix session'
     # --- 0. Refuse to nest inside an existing Claude Code session ----------
     if set -q CLAUDECODE
-        echo "❌ sem_ai launches an interactive Claude /plan session, which can't nest inside an existing Claude Code session." >&2
+        echo "❌ semclaude launches an interactive Claude /plan session, which can't nest inside an existing Claude Code session." >&2
         echo "   Open a plain terminal and run it there." >&2
         return 1
     end
 
     # --- 1. Validate arg & deps -------------------------------------------
     if test (count $argv) -gt 1
-        echo "❌ Usage: sem_ai [semaphore-job-or-workflow-url]" >&2
+        echo "❌ Usage: semclaude [semaphore-job-or-workflow-url]" >&2
         return 1
     end
 
@@ -48,11 +48,11 @@ function sem_ai --description 'Gather failing Semaphore CI context and launch a 
             set branch (gh pr view --json headRefName -q .headRefName 2>/dev/null)
         end
         if test -z "$branch"
-            echo "❌ Could not determine the current branch. Pass a URL: sem_ai <semaphore-job-or-workflow-url>" >&2
+            echo "❌ Could not determine the current branch. Pass a URL: semclaude <semaphore-job-or-workflow-url>" >&2
             return 1
         end
         if test -z "$current_slug"
-            echo "❌ Could not determine the GitHub repo for this checkout. Pass a URL: sem_ai <semaphore-job-or-workflow-url>" >&2
+            echo "❌ Could not determine the GitHub repo for this checkout. Pass a URL: semclaude <semaphore-job-or-workflow-url>" >&2
             return 1
         end
         # Newest Semaphore commit status wins.
@@ -70,7 +70,7 @@ function sem_ai --description 'Gather failing Semaphore CI context and launch a 
             if test -s $gh_err
                 sed 's/^/   gh: /' $gh_err >&2
             end
-            echo "   Pass a URL: sem_ai <semaphore-job-or-workflow-url>" >&2
+            echo "   Pass a URL: semclaude <semaphore-job-or-workflow-url>" >&2
             rm -f $gh_err
             return 1
         end
@@ -338,7 +338,7 @@ function sem_ai --description 'Gather failing Semaphore CI context and launch a 
     if test -n "$pr_number"; and test "$pr_number" != null
         set pr_note " (PR #$pr_number)"
     end
-    __ai_run "Fix the failing Semaphore CI checks on branch $head$pr_note.
+    claude "Fix the failing Semaphore CI checks on branch $head$pr_note.
 Start with ./ci-failures/README.md — it indexes one extract file per failing job, plus how to inspect the changes.
 Delete the ./ci-failures/ directory once all addressed.
 I need you to breakdown the why and where of each failure issue and why our proposed solution fixes it.

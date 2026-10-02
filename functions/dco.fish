@@ -13,7 +13,6 @@ function dco --description 'Start a devcontainer and run claude (or a custom com
     end
 
     # Build the exec command: no args → fish, args → fish -C '<args>'.
-    # The pi helpers pass a command string, so this remains backend-neutral.
     set -l cmd
     if test (count $argv) -eq 0
         set cmd fish

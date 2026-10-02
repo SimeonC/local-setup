@@ -23,11 +23,7 @@ function notify
             end
         end
         if test -z "$title"
-            if set -q TMUX
-                set title (tmux display-message -p '#S / #W')
-            else
-                set title (basename $PWD)
-            end
+            set title (basename $PWD)
         end
     end
     osascript -e "display notification \"$argv[1]\" with title \"$title\""

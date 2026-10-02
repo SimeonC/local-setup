@@ -5,28 +5,5 @@ function peer --wraps=claude --description 'Claude with the local peer-programmi
         return 1
     end
 
-    # The peer mode always requires Claude. Save and restore the user's normal
-    # backend around the existing wrapper so this invocation alone is forced.
-    set -l had_global (set -qg AI_BACKEND; echo $status)
-    set -l previous_backend $AI_BACKEND
-    set -l exported_backend 0
-    if set -qgx AI_BACKEND
-        set exported_backend 1
-    end
-    set -gx AI_BACKEND claude
-
     claude $argv --plugin-dir "$plugin_dir"
-    set -l result $status
-
-    if test $had_global -eq 0
-        if test $exported_backend -eq 1
-            set -gx AI_BACKEND $previous_backend
-        else
-            set -ug AI_BACKEND $previous_backend
-        end
-    else
-        # Erase only our global override so a universal value becomes visible again.
-        set -ge AI_BACKEND
-    end
-    return $result
 end
