@@ -21,3 +21,7 @@ fish_variables*
 *_tc.*
 /claude/skills/graphify
 /.poolside
+
+# alfred-launch: compiled Go binary (build with setup.sh / make build)
+/alfred-launch/workflow/alfred
+/alfred-launch/alfred

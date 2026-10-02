@@ -32,7 +32,7 @@ if command -v brew >/dev/null 2>&1; then
   echo "Installing base dependencies via brew..."
   # `gh` (autoplan PR phase, prclaude) and `fzf` (model/branch/root pickers) are
   # required. colima/docker provide the container runtime.
-  for pkg in git jq fish mise gum mdcat glow yq dotenvx/brew/dotenvx gh fzf colima docker uv; do
+  for pkg in git jq fish mise gum mdcat glow yq dotenvx/brew/dotenvx gh fzf colima docker uv go; do
     brew install "$pkg" || echo "  ⚠️  brew install $pkg failed — continuing"
   done
   # gh extension install is NOT idempotent (errors if already present) — guard it.
@@ -113,6 +113,40 @@ fi
 mkdir -p ~/.grit
 ln -sfn "$SCRIPT_DIR/grit_patterns" ~/.grit/patterns
 
+# Alfred "Launch" workflow: build the Go binary and link the workflow into
+# Alfred. Alfred runs a Script Filter with the workflow folder as its working
+# directory, so the filter calls the binary as ./alfred and it must sit next to
+# info.plist. The link keeps the workflow's UUID directory name so Alfred keeps
+# the workflow's identity and bindings.
+# Alfred can sync its preferences to a custom folder (Alfred → Advanced →
+# Syncing), so read that location rather than assuming the default.
+ALFRED_SYNC="$(defaults read com.runningwithcrayons.Alfred-Preferences syncfolder 2>/dev/null || true)"
+ALFRED_SYNC="${ALFRED_SYNC/#\~/$HOME}"
+[ -d "$ALFRED_SYNC/Alfred.alfredpreferences/workflows" ] || ALFRED_SYNC="$HOME/Library/Application Support/Alfred"
+
+ALFRED_DIR="$SCRIPT_DIR/alfred-launch"
+ALFRED_WORKFLOW="$ALFRED_DIR/workflow"
+ALFRED_WORKFLOW_LINK="$ALFRED_SYNC/Alfred.alfredpreferences/workflows/user.workflow.1C804719-BF45-4D7A-B15F-4C7C1C0880C3"
+if [ -d "$ALFRED_WORKFLOW" ]; then
+  if command -v go >/dev/null 2>&1; then
+    if (cd "$ALFRED_DIR" && go build -o workflow/alfred .); then
+      echo "  Built $ALFRED_WORKFLOW/alfred"
+    else
+      echo "  ⚠️  go build failed — the Launch workflow will not run until this is fixed"
+    fi
+  else
+    echo "  ⚠️  go not found — skipping alfred workflow build"
+  fi
+
+  if [ -d "$(dirname "$ALFRED_WORKFLOW_LINK")" ]; then
+    ln -sfn "$ALFRED_WORKFLOW" "$ALFRED_WORKFLOW_LINK"
+  else
+    echo "  ⚠️  Alfred workflows directory not found — skipping workflow link"
+  fi
+else
+  echo "  ⚠️  $ALFRED_WORKFLOW is missing — skipping Alfred workflow setup"
+fi
+
 echo "Show hidden dot files by default..."
 defaults write com.apple.finder AppleShowAllFiles -boolean true; killall Finder;
 
@@ -126,3 +160,4 @@ for hook in "$SCRIPT_DIR"/claude/hooks/*; do
   echo "  ~/.claude/hooks/$(basename "$hook") -> $hook"
 done
 echo "  ~/.grit/patterns -> $SCRIPT_DIR/grit_patterns"
+echo "  Alfred Launch workflow -> $SCRIPT_DIR/alfred-launch/workflow (built: workflow/alfred)"
