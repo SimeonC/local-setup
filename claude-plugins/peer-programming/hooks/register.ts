@@ -74,6 +74,8 @@ const resolveTarget = async ($: Dollar, path: string, base: string): Promise<str
 
 type Dollar = Pick<Engine, 'state' | 'session' | 'fs' | 'process' | 'env' | 'plugin' | 'agent' | 'tool' | 'ui'>
 
+type WatchStep = { ok?: boolean }
+
 type WatchBatch = {
   v: number
   event?: string
@@ -86,8 +88,64 @@ type WatchBatch = {
   status?: PendingRun['status']
   output?: string
   diagnostics?: unknown[]
+  steps?: WatchStep[]
+  ambiguous?: unknown[]
+  missing?: unknown[]
   code?: string
   message?: string
+}
+
+// Toasts are plain text (no ANSI color), so status colour comes from a leading
+// glyph: ✅ green for pass, ❌ red for fail, ⚠️ amber for trouble, ➖ for skips.
+const STATUS_GLYPH: Record<PendingRun['status'], string> = {
+  running: '⏳',
+  passed: '✅',
+  failed: '❌',
+  error: '⚠️',
+  unresolved: '⚠️',
+  ambiguous: '⚠️',
+  no_tests: '➖',
+}
+
+const count = (value: unknown): number => (Array.isArray(value) ? value.length : 0)
+const plural = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? '' : 's'}`
+
+/** One-line, colour-coded toast summary with pass/fail counts for a batch. */
+const summarizeBatch = (event: WatchBatch, run: PendingRun): string => {
+  const glyph = STATUS_GLYPH[run.status] ?? '•'
+  const checks = count(event.steps)
+  const passedChecks = (event.steps ?? []).filter(step => step?.ok).length
+  const failedChecks = checks - passedChecks
+  const issues = count(event.diagnostics)
+  const files = run.paths.length
+  const unresolved = count(event.ambiguous) + count(event.missing)
+
+  const detail = (() => {
+    switch (run.status) {
+      case 'passed':
+        return [checks ? plural(checks, 'check') : '', run.tests.length ? plural(run.tests.length, 'test file') : '']
+          .filter(Boolean)
+          .join(', ')
+      case 'failed':
+        return [
+          checks ? `${failedChecks}/${checks} checks failed` : 'tests failed',
+          issues ? plural(issues, 'issue') : '',
+        ]
+          .filter(Boolean)
+          .join(', ')
+      case 'error':
+        return (event.message ?? run.output ?? 'runner error').split('\n')[0].slice(0, 120)
+      case 'unresolved':
+        return `${plural(unresolved, 'test mapping')} to resolve`
+      case 'no_tests':
+        return `no tests mapped for ${plural(files, 'changed file')}`
+      default:
+        return ''
+    }
+  })()
+
+  const headline = `${glyph} Peer tests ${run.status}`
+  return detail ? `${headline} — ${detail} · ${run.batchId}` : `${headline} · ${run.batchId}`
 }
 
 const readState = async ($: Dollar): Promise<{ value: PeerState | undefined; version: number }> => $.state.get(STATE)
@@ -198,7 +256,7 @@ const processBatch = async ($: Dollar, event: WatchBatch): Promise<void> => {
     runs: { ...state.runs, [event.batchId!]: lastRun },
     seenBatches: [...state.seenBatches, event.batchId!].slice(-100),
   }))
-  $.ui.toast(`Peer tests ${String(lastRun.status)} for ${event.batchId}.`)
+  $.ui.toast(summarizeBatch(event, lastRun))
   if (!hasSourceChange(paths)) return
   if (held.value.agentRuns[event.batchId]) return
   await changeState($, state => ({ ...state, agentRuns: { ...state.agentRuns, [event.batchId!]: 'starting' } }))
